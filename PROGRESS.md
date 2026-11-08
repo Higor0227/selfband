@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 5 — Export (5a confirmed; 5b in progress)
+## Current phase: Phase 5 — Export (5b confirmed; 5c in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -603,4 +603,47 @@ Use a project with 2+ tracks, some mixer settings (volume, pan, EQ, reverb) and 
 - One export at a time. Exporting another project while one runs is blocked with a message.
 - Exporting a file with the same name again does not overwrite it: Android adds " (1)" etc.
 - The Exportar button is disabled while playing or recording.
-- Video export comes in 5b.
+- Video export: see 5b.
+
+### 5b — Video export: MP4 H.264 + AAC (confirmed by the owner on 2026-11-08)
+- **Same renderer as the preview (SPEC 2.6):** the drawing code moved out of `GlCanvasPreview` into `CanvasDrawer`, which handles the background color, blurred video or picture, then the layers with crop, rotation, corners, border and opacity.
+  - The live preview and the export both call it, so the file looks like the preview.
+  - The preview itself is unchanged.
+- **Offline render:** `CanvasRenderer` (`:core:video`) draws into the encoder's input surface on the export thread.
+  - Each video has a `FrameStepDecoder`. It picks frames with the same rule as the preview: nearest frame, first frame before the video starts, last frame after it ends.
+  - It waits for every frame instead of dropping late ones, so the export never skips frames even when the phone is slow.
+- **Clock:** the audio frame position drives everything.
+  - Video frame k shows project position `trimStart + k · sampleRate / 30` and is stamped k / 30 s. Audio sample n is stamped n / sampleRate.
+  - The audio is the same mix as the WAV: same graph, metronome excluded. Effect state is reset before each pass, and the mix WAV made after a video is bit-identical to one made alone.
+- **AAC delay:** the AAC encoder puts silence (priming) before the sound, so a naive MP4 would have the audio late. The export measures that delay at run time and delays the video by the same amount, written as an MP4 edit list.
+  - The measurement encodes and decodes a click, once per sample rate per app run. It is measured, never a per-device constant.
+  - Measured on the test phone: 2048 frames (42.7 ms).
+- **Encoding:** H.264 with High profile when the encoder offers it (otherwise its default). Size follows the canvas with a short side of 1080: 1080×1920 for 9:16, 1920×1080 for 16:9, 1080×1080 for 1:1. 30 fps, keyframe every 1 s, automatic bitrate (~12.5 Mbps at 1080p30), BT.709. AAC-LC stereo at 256 kbps and the project sample rate (48 kHz on the test phone). MediaMuxer writes the MP4.
+- **Output:** `Movies/Selfband/<project>.mp4`, written as a hidden (pending) MediaStore item and removed on cancel or error.
+  - WAVs still go to `Music/Selfband/<project>/`.
+  - On the screen, Vídeo (MP4) is on by default; Mix and Stems are off by default. Any combination works in one export: video first, then mix, then stems. The done screen lists every file and both folders, and Compartilhar sends them all.
+- **Errors:** no suitable encoder, or a codec error, shows "Não foi possível codificar o vídeo neste aparelho" and leaves no partial file.
+- 4 new tests: sizes per format, even sides, automatic bitrate, default options. 81 unit tests in total.
+- Checked by me on the phone, project "Música 2" (3 tracks, 9:16, 7.09 s):
+  - **Speed:** the export took about 2 s.
+  - **File:** `Música 2.mp4` is 10.9 MB, 1080×1920, 213 frames at 30 fps, with AAC; the video edit list starts at 42.7 ms.
+  - **Content:** a frame of the MP4 shows the same 3-video layout as the recorder preview.
+  - **All at once:** video + mix + stems produced 5 files; the WAVs were identical to the 5a ones.
+  - **Cleanup:** I deleted the duplicate "(1)" files of that second test. The first `Música 2.mp4` and the 5a WAVs are still on the phone for you to check.
+
+### 5b checklist (owner)
+Use a project with 2+ tracks with video, a trim and some layout/background changes. Ideally one with a clap at the start.
+1. In the recorder tap **Exportar**. The **Vídeo (MP4)** card shows the size, 30 fps, the bitrate and "Salvo em Movies/Selfband/<projeto>.mp4". Leave only Vídeo on and export.
+2. When done, open the MP4 from the gallery (album Selfband) or with **Compartilhar**. It should look exactly like the canvas in the recorder: same layout, crops, corners, border, background (color, blur or picture), only the trimmed range.
+3. **Sync:** on the clap, picture and sound happen together. Compare with the preview in the recorder; there should be no extra offset.
+4. Turn on **Mix** and **Stems** too and export again: you get the MP4 plus the WAVs, and the done screen lists both folders. Share them all at once.
+5. Try a 16:9 project and a 1:1 one: 1920×1080 and 1080×1080.
+6. Export a longer project, then press Home or turn the screen off: the notification shows "Renderizando o vídeo…" with progress and the export finishes.
+7. Start a long export and **Cancelar**: no partial MP4 is left in Movies/Selfband.
+8. Post a test to Instagram/TikTok (optional, per SPEC §5): it should accept the file and keep the sync after their recompression.
+
+### 5b known issues / notes
+- Fixed for now: H.264, short side 1080, 30 fps, automatic bitrate. HEVC, 720p/4K, 60 fps, manual bitrate and the decoder-instance limits come in 5c.
+- All videos are decoded at once, one decoder each. Projects with many video tracks may hit the device's decoder limit; multi-pass composition is planned for Phase 6 (SPEC 3.5).
+- AAC uses the project sample rate. SPEC asks for 48 kHz; projects are created at the device rate, which is 48 kHz on the test phone. A 44.1 kHz project would export AAC at 44.1 kHz (no resampling yet).
+- Exporting again does not overwrite: Android adds " (1)" to the name.

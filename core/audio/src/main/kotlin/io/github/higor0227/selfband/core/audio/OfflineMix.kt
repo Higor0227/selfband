@@ -19,6 +19,9 @@ class OfflineMix private constructor(private var handle: Long, private val track
     /** Channels of track [index]'s take (1 or 2): stems keep them. */
     fun trackChannels(index: Int): Int = nativeTrackChannels(checkOpen(), index)
 
+    /** Clears effect state (EQ, reverb tail, limiter): call before each new pass over the timeline. */
+    fun reset() = nativeReset(checkOpen())
+
     /** Mix of project frames [position, position + frames) as interleaved stereo into [out]. */
     fun renderMix(position: Long, frames: Int, out: FloatArray) {
         require(frames in 0..MAX_BLOCK_FRAMES && out.size >= frames * 2)
@@ -66,6 +69,7 @@ class OfflineMix private constructor(private var handle: Long, private val track
             sends: FloatArray, reverb: FloatArray, masterGain: Float, limiter: Boolean,
         ): Long
         @JvmStatic private external fun nativeClose(handle: Long)
+        @JvmStatic private external fun nativeReset(handle: Long)
         @JvmStatic private external fun nativeTrackChannels(handle: Long, index: Int): Int
         @JvmStatic private external fun nativeRenderMix(handle: Long, position: Long, frames: Int, out: FloatArray)
         @JvmStatic private external fun nativeRenderStem(handle: Long, index: Int, position: Long, frames: Int, out: FloatArray)

@@ -3,6 +3,7 @@
 <resources>
     <string name="export_channel">Exports</string>
     <string name="export_running_title">Exporting %1$s</string>
+    <string name="export_step_video">Rendering the video…</string>
     <string name="export_step_mix">Rendering the mix…</string>
     <string name="export_step_stems">Rendering stems (track %1$d of %2$d)…</string>
     <string name="export_cancel">Cancel</string>

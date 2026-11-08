@@ -63,6 +63,8 @@ OFFLINE_FN(jlong, nativeOpen)(JNIEnv *env, jclass, jint sampleRate, jobjectArray
 
 OFFLINE_FN(void, nativeClose)(JNIEnv *, jclass, jlong handle) { delete asMixer(handle); }
 
+OFFLINE_FN(void, nativeReset)(JNIEnv *, jclass, jlong handle) { asMixer(handle)->reset(); }
+
 OFFLINE_FN(jint, nativeTrackChannels)(JNIEnv *, jclass, jlong handle, jint index) {
     return asMixer(handle)->trackChannels(index);
 }

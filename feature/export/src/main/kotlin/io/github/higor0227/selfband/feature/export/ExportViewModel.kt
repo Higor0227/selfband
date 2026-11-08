@@ -53,6 +53,7 @@ class ExportViewModel @Inject constructor(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExportUiState())
 
+    fun setVideo(on: Boolean) = options.update { it.copy(video = on) }
     fun setMixWav(on: Boolean) = options.update { it.copy(mixWav = on) }
     fun setStems(on: Boolean) = options.update { it.copy(stems = on) }
     fun setFormat(format: WavFormat) = options.update { it.copy(wavFormat = format) }

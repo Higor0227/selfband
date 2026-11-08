@@ -58,6 +58,15 @@ internal class BackgroundRenderer(private val handler: Handler) {
         }, "SelfbandBgImage").start()
     }
 
+    /** Loads the picture right away on the GL thread (export: the first frame must have it). */
+    fun loadImageNow(file: File?) {
+        wantedImage = file?.absolutePath
+        pending?.recycle()
+        pending = null
+        deleteImageTexture()
+        if (file != null) decode(file)?.let { upload(it) }
+    }
+
     /** Draws the picture over the canvas ([canvasFrame] normalized to the viewport). */
     fun drawImage(canvasFrame: FloatArray, canvasAspect: Float): Boolean {
         pending?.let { upload(it) }

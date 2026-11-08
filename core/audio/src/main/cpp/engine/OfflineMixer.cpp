@@ -37,6 +37,11 @@ bool OfflineMixer::open(int32_t sampleRate, const std::vector<TrackConfig> &trac
     return true;
 }
 
+void OfflineMixer::reset() {
+    for (auto &track : mTracks) track->mix.reset();
+    mMaster.reset();
+}
+
 void OfflineMixer::renderMix(int64_t position, int32_t frames, float *out) {
     frames = std::clamp(frames, 0, kMaxBlockFrames);
     std::memset(out, 0, static_cast<size_t>(frames) * 2 * sizeof(float));

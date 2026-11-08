@@ -26,6 +26,9 @@ public:
     bool open(int32_t sampleRate, const std::vector<TrackConfig> &tracks, const float *reverbParams,
               int32_t reverbParamCount, float masterGain, bool limiter);
 
+    /** Clears effect state (EQ, reverb tail, limiter) before rendering a new pass. */
+    void reset();
+
     /** Mix of project frames [position, position + frames) as interleaved stereo. */
     void renderMix(int64_t position, int32_t frames, float *out);
 

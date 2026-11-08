@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.core.video.internal
 
-import android.graphics.SurfaceTexture
 import android.opengl.EGLSurface
-import android.opengl.GLES30
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
 import android.view.Choreographer
 import android.view.Surface
 import io.github.higor0227.selfband.core.model.LOG_TAG
-import io.github.higor0227.selfband.core.model.value
 import io.github.higor0227.selfband.core.video.CanvasPreview
 import io.github.higor0227.selfband.core.video.CanvasPreviewFactory
 import io.github.higor0227.selfband.core.video.CanvasScene
@@ -20,7 +17,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
-import kotlin.math.min
 
 internal class GlCanvasPreviewFactory @Inject constructor() : CanvasPreviewFactory {
     override fun create(): CanvasPreview = GlCanvasPreview()
@@ -38,8 +34,7 @@ internal class GlCanvasPreview : CanvasPreview {
 
     // Render thread only from here on.
     private lateinit var egl: EglCore
-    private lateinit var program: LayerProgram
-    private lateinit var background: BackgroundRenderer
+    private lateinit var drawer: CanvasDrawer
     private var ready = false
     private var window: EGLSurface? = null
     private var width = 0
@@ -52,33 +47,25 @@ internal class GlCanvasPreview : CanvasPreview {
     private var paused = false
     private var lastFrameNanos = 0L
     private var vsyncNanos = DEFAULT_VSYNC_NANOS
-    private val params = LayerProgram.Params()
-    private val canvasFrame = FloatArray(4)
     private val frameCallback = Choreographer.FrameCallback { onVsync(it) }
 
-    private class LayerState(
-        val key: String,
-        var scene: SceneLayer,
-        val texture: Int,
-        val surfaceTexture: SurfaceTexture,
-        val surface: Surface,
-        val decoder: LayerDecoder?,
-        /** False for the video that only feeds the blurred background. */
-        var drawn: Boolean,
-    ) {
+    private class LayerState(key: String, scene: SceneLayer, drawn: Boolean) : LayerTexture(key, scene, drawn) {
+        var decoder: LayerDecoder? = null
         val frameAvailable = AtomicBoolean(false)
-        var hasFrame = false
-        val texMatrix = FloatArray(16)
         /** Frames latched since the last diagnostics line. */
         var latched = 0
+
+        override fun release() {
+            decoder?.release()
+            super.release()
+        }
     }
 
     init {
         handler.post {
             try {
                 egl = EglCore()
-                program = LayerProgram()
-                background = BackgroundRenderer(handler)
+                drawer = CanvasDrawer(handler)
                 ready = true
             } catch (e: Exception) {
                 Log.e(LOG_TAG, "canvas: GL init failed", e)
@@ -125,7 +112,7 @@ internal class GlCanvasPreview : CanvasPreview {
             this.scene = scene
             if (ready) {
                 if (!paused) syncLayers(scene)
-                background.setImage(scene.image) { dirty = true }
+                drawer.background.setImage(scene.image) { dirty = true }
             }
             dirty = true
         }
@@ -161,8 +148,7 @@ internal class GlCanvasPreview : CanvasPreview {
             layers.forEach { it.release() }
             layers.clear()
             if (ready) {
-                background.release()
-                program.release()
+                drawer.release()
                 egl.release()
                 ready = false
             }
@@ -176,8 +162,7 @@ internal class GlCanvasPreview : CanvasPreview {
      */
     private fun syncLayers(scene: CanvasScene) {
         val drawn = scene.layers.associateBy { it.file.absolutePath }
-        val wanted = LinkedHashMap(drawn)
-        scene.blur?.let { wanted.putIfAbsent(it.file.absolutePath, it) }
+        val wanted = CanvasDrawer.wantedLayers(scene)
         val iterator = layers.iterator()
         while (iterator.hasNext()) {
             val state = iterator.next()
@@ -193,29 +178,19 @@ internal class GlCanvasPreview : CanvasPreview {
         val existing = layers.map { it.key }.toSet()
         for ((key, layer) in wanted) {
             if (key in existing) continue
-            val texture = LayerProgram.createExternalTexture()
-            val surfaceTexture = SurfaceTexture(texture)
-            val surface = Surface(surfaceTexture)
-            val decoder = if (layer.file.exists()) {
-                LayerDecoder(layer.file, surface, layer.frameRate).also { it.start() }
+            val state = LayerState(key, layer, drawn = key in drawn)
+            state.surfaceTexture.setOnFrameAvailableListener({ state.frameAvailable.set(true) }, handler)
+            state.decoder = if (layer.file.exists()) {
+                LayerDecoder(layer.file, state.surface, layer.frameRate).also { it.start() }
             } else {
                 Log.w(LOG_TAG, "canvas: missing video ${layer.file.name}")
                 null
             }
-            val state = LayerState(key, layer, texture, surfaceTexture, surface, decoder, drawn = key in drawn)
-            surfaceTexture.setOnFrameAvailableListener({ state.frameAvailable.set(true) }, handler)
             layers += state
         }
         // Draw order follows the scene.
         val order = scene.layers.withIndex().associate { it.value.file.absolutePath to it.index }
         layers.sortBy { order[it.key] ?: Int.MAX_VALUE }
-    }
-
-    private fun LayerState.release() {
-        decoder?.release()
-        surface.release()
-        surfaceTexture.release()
-        GLES30.glDeleteTextures(1, intArrayOf(texture), 0)
     }
 
     private fun postCallback() {
@@ -252,20 +227,15 @@ internal class GlCanvasPreview : CanvasPreview {
             for (i in layers.indices) {
                 val state = layers[i]
                 if (state.frameAvailable.getAndSet(false)) {
-                    try {
-                        state.surfaceTexture.updateTexImage()
-                        state.surfaceTexture.getTransformMatrix(state.texMatrix)
-                        state.hasFrame = true
+                    if (state.latch()) {
                         state.latched++
                         dirty = true
-                    } catch (e: RuntimeException) {
-                        Log.w(LOG_TAG, "canvas: updateTexImage failed", e)
                     }
                     state.decoder?.markConsumed()
                 }
             }
             if (dirty && scene != null) {
-                draw(scene)
+                drawer.draw(scene, layers, width, height)
                 if (egl.swap(surface)) dirty = false
             }
         }
@@ -289,100 +259,6 @@ internal class GlCanvasPreview : CanvasPreview {
         }
         layers.forEach { it.latched = 0 }
         Log.d(LOG_TAG, "canvas: pos=${lastPosition.toLong()} vsync=${vsyncNanos / 1000}us $line")
-    }
-
-    private fun draw(scene: CanvasScene) {
-        GLES30.glViewport(0, 0, width, height)
-        GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
-        GLES30.glClearColor(0f, 0f, 0f, 1f)
-        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        if (width <= 0 || height <= 0) return
-
-        // Canvas rectangle: fit the project aspect ratio into the surface.
-        val aspect = scene.aspectRatio.value
-        val cw: Float
-        val ch: Float
-        if (width.toFloat() / height > aspect) {
-            ch = height.toFloat(); cw = ch * aspect
-        } else {
-            cw = width.toFloat(); ch = cw / aspect
-        }
-        val cx = (width - cw) / 2f
-        val cy = (height - ch) / 2f
-
-        GLES30.glEnable(GLES30.GL_SCISSOR_TEST)
-        GLES30.glScissor(cx.toInt(), (height - cy - ch).toInt(), cw.toInt(), ch.toInt())
-        val bg = scene.backgroundColor
-        GLES30.glClearColor(
-            ((bg shr 16) and 0xFF) / 255f, ((bg shr 8) and 0xFF) / 255f, (bg and 0xFF) / 255f, 1f,
-        )
-        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        canvasFrame[0] = cx / width
-        canvasFrame[1] = cy / height
-        canvasFrame[2] = cw / width
-        canvasFrame[3] = ch / height
-        drawBackground(scene, cw, ch, aspect)
-
-        GLES30.glEnable(GLES30.GL_BLEND)
-        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
-        val shorter = min(cw, ch)
-        for (i in layers.indices) {
-            val state = layers[i]
-            val layer = state.scene.layer
-            if (!state.drawn || !layer.visible || layer.opacity <= 0f) continue
-            val p = params
-            val f = layer.frame
-            p.frame[0] = (cx + f.x * cw) / width
-            p.frame[1] = (cy + f.y * ch) / height
-            p.frame[2] = f.width * cw / width
-            p.frame[3] = f.height * ch / height
-            p.widthPx = f.width * cw
-            p.heightPx = f.height * ch
-            p.crop[0] = layer.crop.x
-            p.crop[1] = layer.crop.y
-            p.crop[2] = layer.crop.width
-            p.crop[3] = layer.crop.height
-            p.quarterTurns = ((state.scene.rotationDegrees / 90) % 4 + 4) % 4
-            p.radiusPx = layer.cornerRadius * min(p.widthPx, p.heightPx)
-            p.borderPx = layer.borderWidth * shorter
-            val bc = layer.borderColor
-            p.borderColor[0] = ((bc shr 16) and 0xFF) / 255f
-            p.borderColor[1] = ((bc shr 8) and 0xFF) / 255f
-            p.borderColor[2] = (bc and 0xFF) / 255f
-            p.borderColor[3] = ((bc shr 24) and 0xFF) / 255f
-            p.opacity = layer.opacity
-            p.hasTexture = state.hasFrame
-            if (state.hasFrame) {
-                System.arraycopy(state.texMatrix, 0, p.texMatrix, 0, 16)
-                p.texture = state.texture
-            }
-            program.draw(p)
-        }
-        GLES30.glDisable(GLES30.GL_BLEND)
-        GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
-    }
-
-    /** Blurred video or picture over the background color, if any is ready. */
-    private fun drawBackground(scene: CanvasScene, cw: Float, ch: Float, aspect: Float) {
-        val blur = scene.blur
-        if (blur != null) {
-            val key = blur.file.absolutePath
-            var state: LayerState? = null
-            for (i in layers.indices) if (layers[i].key == key) state = layers[i]
-            if (state == null || !state.hasFrame) return
-            val p = params
-            p.crop[0] = blur.layer.crop.x
-            p.crop[1] = blur.layer.crop.y
-            p.crop[2] = blur.layer.crop.width
-            p.crop[3] = blur.layer.crop.height
-            p.quarterTurns = ((blur.rotationDegrees / 90) % 4 + 4) % 4
-            p.hasTexture = true
-            p.texture = state.texture
-            System.arraycopy(state.texMatrix, 0, p.texMatrix, 0, 16)
-            background.drawBlur(program, p, cw, ch, canvasFrame, width, height)
-        } else if (scene.image != null) {
-            background.drawImage(canvasFrame, aspect)
-        }
     }
 
     private companion object {

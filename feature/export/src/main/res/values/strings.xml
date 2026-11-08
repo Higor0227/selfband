@@ -5,6 +5,9 @@
     <string name="export_title">Export</string>
     <string name="export_range">Range: %1$s → %2$s (%3$s)</string>
     <string name="export_range_trimmed">trimmed in the timeline</string>
+    <string name="export_video_section">Video</string>
+    <string name="export_video">Video (MP4)</string>
+    <string name="export_video_hint">%1$d×%2$d, %3$d fps, H.264 at %4$s Mbps, with the mix as AAC 256 kbps. The canvas exactly as in the preview, ready for Instagram, TikTok etc.</string>
     <string name="export_audio">Audio</string>
     <string name="export_mix_wav">Mix (WAV)</string>
     <string name="export_mix_wav_hint">The stereo mix exactly as you hear it, with the mixer, EQ, reverb and limiter. The metronome is never exported.</string>
@@ -16,14 +19,17 @@
     <string name="export_destination">Saved to %1$s</string>
     <string name="export_start">Export</string>
     <string name="export_nothing">Nothing recorded to export yet.</string>
+    <string name="export_running_video">Rendering the video…</string>
     <string name="export_running_mix">Rendering the mix…</string>
     <string name="export_running_stems">Rendering stems (track %1$d of %2$d)…</string>
     <string name="export_cancel">Cancel</string>
     <string name="export_done">Done: %1$d file(s) in %2$s</string>
+    <string name="export_and">" and "</string>
     <string name="export_share">Share</string>
     <string name="export_again">New export</string>
     <string name="export_failed_empty">Nothing to export: no recorded audio in the range.</string>
     <string name="export_failed_take">A take could not be read. Was a file deleted?</string>
+    <string name="export_failed_video">The video could not be encoded on this device.</string>
     <string name="export_failed_write">The file could not be saved (is the storage full?).</string>
     <string name="export_cancelled">Export cancelled. Nothing was saved.</string>
     <string name="export_other_project">Another project is being exported.</string>
