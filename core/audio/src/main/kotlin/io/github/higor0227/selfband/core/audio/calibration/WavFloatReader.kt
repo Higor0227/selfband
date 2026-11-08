@@ -89,5 +89,31 @@ internal object WavFloatReader {
         }
     }.getOrNull()
 
+    /**
+     * Absolute peak (loudest channel) of every block of [framesPerPeak] frames, streamed.
+     * Null if the file is unreadable.
+     */
+    fun peaks(file: File, framesPerPeak: Int): FloatArray? = runCatching {
+        RandomAccessFile(file, "r").use { raf ->
+            val l = layout(raf) ?: return null
+            raf.seek(l.dataOffset)
+            val out = FloatArray(((l.frames + framesPerPeak - 1) / framesPerPeak).toInt())
+            val block = ByteArray(4 * l.channels * BLOCK_FRAMES)
+            var frame = 0L
+            while (frame < l.frames) {
+                val n = minOf(BLOCK_FRAMES.toLong(), l.frames - frame).toInt()
+                raf.readFully(block, 0, n * 4 * l.channels)
+                val floats = ByteBuffer.wrap(block, 0, n * 4 * l.channels).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
+                for (i in 0 until n * l.channels) {
+                    val v = abs(floats.get(i))
+                    val bucket = ((frame + i / l.channels) / framesPerPeak).toInt()
+                    if (v > out[bucket]) out[bucket] = v
+                }
+                frame += n
+            }
+            out
+        }
+    }.getOrNull()
+
     private const val BLOCK_FRAMES = 8192
 }

@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 4 — Basic mixing (4a and 4b done; 4c next)
+## Current phase: Phase 4 — Basic mixing (complete; Phase 5 next)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -517,3 +517,41 @@ Use headphones for the reverb tests, and a project with 2+ tracks (ideally one w
 - Confirmed on the device by the owner.
 - Dragging the reverb **size** can cause a short artifact (the delay lengths jump; smoothing them would bend the pitch of the tail).
 - The EQ and reverb also need to run in the Phase 5 export render; they are written as plain classes so the offline mix can reuse them.
+
+### 4c — Offset by waveform + global trim (confirmed by the owner on 2026-11-08)
+- **Timeline card** in Mixer mode, above the mixer card: one waveform lane per track on a shared time axis, with a ruler, the playhead and the global trim.
+  - Drag a lane sideways to move that track. This changes the manual offset of its active take; the WAV is never rewritten. The lane keeps its new place and the engine reloads the tracks on release.
+  - Zoom: **+ / − / Ajustar**. At the closest zoom 1 px = 2 frames. While zoomed, drag the ruler (away from the handles) to scroll.
+  - Below the timeline, the selected track (tap a lane) shows its manual offset in ms and samples, with nudges −10 ms, −1 ms, −1 sample, +1 sample, +1 ms, +10 ms and "Zerar" (sample precision, SPEC 2.5). Typing the offset in ms is still in the pencil dialog of the track card.
+  - Moving the audio does not move the video: the video offset stays separate (SPEC 2.5), still set in "Verificar sync".
+  - Editing is off while playing or recording (dragging then only scrolls).
+- **Global trim** (SPEC 2.6): drag the two handles on the ruler. The cut parts are dimmed and the canvas shows the frame at the handle while dragging. There are also buttons "Início no cursor", "Fim no cursor" and "Sem corte".
+  - Playback stays inside the trim: it starts at the trim start if the playhead is outside, and stops at the trim end.
+  - Recording is not limited by the trim.
+  - An end at the project end is stored as "until the end", so it follows longer takes recorded later.
+  - Minimum trimmed length: 100 ms. The export (Phase 5) will use this range.
+- **Waveforms:** peaks of each take (loudest channel, every 64 frames) are computed once in the background. They are cached next to the WAV (`<take>.wav.peaks`) and deleted with the take.
+  - Coarser levels let a zoomed-out view read few values.
+  - Bars use a −48..0 dBFS scale so quiet takes stay visible.
+- **Model:** `Project.trimStartFrame`, `Project.trimEndFrame` (null = project end), `trimStart` / `trimEnd` / `isTrimmed`, `Trim` (normalize, play start), `Waveform` (multi-level peaks).
+  - Older projects read untrimmed.
+  - 6 new tests (trim clamping, minimum length, play start, old JSON, waveform peaks vs brute force at every zoom). 74 unit tests in total.
+
+### 4c checklist (owner)
+Use a project with 2+ tracks; ideally one recorded with a loud clap at the start.
+1. Tap **Mixer**. Above the mixer is **Linha do tempo**, with one waveform per track. Waveforms appear within a second or two the first time and instantly afterwards.
+2. Drag track 2 sideways: it moves, and after release the offset text below updates. Play: track 2 is heard earlier/later accordingly.
+3. Zoom in with **+** several times until the claps of two tracks are wide. Drag one clap onto the other, then refine with **±1 ms** / **±1 amostra**. Play: the claps sound as one. **Zerar** puts the track back where the automatic alignment put it.
+4. Scroll while zoomed by dragging the ruler. **Ajustar** shows everything again.
+5. Drag the **left handle** on the ruler to the right: the start gets dimmed and the canvas shows the frame at the handle. Do the same with the **right handle**. Below, "Corte: a → b (duração)" appears.
+6. Play from the beginning: playback starts at the trim start and stops by itself at the trim end.
+7. Tap the ruler to move the playhead inside the trim and play: it starts there. Try **Início no cursor** / **Fim no cursor** and **Sem corte**.
+8. While playing, dragging a lane only scrolls; the nudges are disabled.
+9. Leave and reopen the project: offsets and trim are kept. Record a new track: it records normally (not limited by the trim). Delete a take: no error.
+10. Check that the video of a moved track still matches its own audio. If it doesn't, use "Verificar sync": the video offset is separate.
+
+### 4c known issues / notes
+- No undo for drags yet; use "Zerar" or the nudges.
+- Pinch-to-zoom is not supported; use the + / − buttons.
+- The playback stop at the trim end is checked every ~50 ms (status rate), so preview may run a few ms past the end. The export will cut exactly.
+- Phase 4 is complete.

@@ -190,6 +190,12 @@ fun RecorderRoute(
             onPreviewReverb = viewModel::previewReverb,
             onSetReverb = viewModel::setReverb,
         ),
+        timeline = TimelineActions(
+            onSetOffsetFrames = viewModel::setManualOffsetFrames,
+            onSetTrim = viewModel::setTrim,
+            onClearTrim = viewModel::clearTrim,
+            onPlayhead = viewModel::setPlayhead,
+        ),
     )
 }
 
@@ -217,6 +223,7 @@ fun RecorderScreen(
     takes: TakeActions,
     canvasActions: CanvasActions,
     mixer: MixerActions,
+    timeline: TimelineActions,
 ) {
     // Ghost opacity follows the slider live; it is saved when the slider is released.
     val savedOpacity = state.cameraSettings.ghostOpacity
@@ -317,7 +324,10 @@ fun RecorderScreen(
             item {
                 when (state.panelMode) {
                     PanelMode.CANVAS -> CanvasLayoutCard(state, canvasActions)
-                    PanelMode.MIXER -> MixerCard(state, mixer)
+                    PanelMode.MIXER -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        TimelineCard(state, timeline)
+                        MixerCard(state, mixer)
+                    }
                     PanelMode.CAMERA -> CameraSettingsCard(state, ghostOpacity, settingsActions)
                 }
             }

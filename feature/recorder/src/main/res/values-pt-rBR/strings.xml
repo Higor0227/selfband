@@ -201,4 +201,20 @@
     <string name="eq_peak">Banda de médios</string>
     <string name="eq_high_shelf">Agudos (shelf)</string>
     <string name="eq_flat">Zerar</string>
+    <!-- Timeline: offset by waveform and global trim (phase 4c) -->
+    <string name="timeline">Linha do tempo</string>
+    <string name="timeline_description">Linha do tempo com uma forma de onda por trilha</string>
+    <string name="zoom_in">+</string>
+    <string name="zoom_out">−</string>
+    <string name="zoom_fit">Ajustar</string>
+    <string name="timeline_offset">Trilha %1$d · offset manual %2$s ms (%3$d amostras)</string>
+    <string name="nudge_minus_sample">−1 amostra</string>
+    <string name="nudge_plus_sample">+1 amostra</string>
+    <string name="nudge_reset">Zerar</string>
+    <string name="trim_none">Corte: nenhum (projeto inteiro)</string>
+    <string name="trim_value">Corte: %1$s → %2$s (%3$s)</string>
+    <string name="trim_start_here">Início no cursor</string>
+    <string name="trim_end_here">Fim no cursor</string>
+    <string name="trim_clear">Sem corte</string>
+    <string name="timeline_hint">Arraste uma trilha para o lado para alinhar; amplie (+) para mais precisão. Arraste as alças da régua para cortar o início e o fim. Toque na régua para mover o cursor. Nada é apagado dos arquivos.</string>
 </resources>

@@ -28,10 +28,19 @@ data class Project(
     val canvas: CanvasSettings = CanvasSettings(),
     val mixer: MixerSettings = MixerSettings(),
     val tracks: List<Track> = emptyList(),
+    /** Global trim start (SPEC 2.6), project frames. See [trimStart]. */
+    val trimStartFrame: Long = 0,
+    /** Global trim end; null = the end of the project (follows new, longer takes). */
+    val trimEndFrame: Long? = null,
 ) {
     /** Project length = end of the longest active take, in frames. */
     val lengthFrames: Long
         get() = tracks.maxOfOrNull { it.activeTake?.endFrame ?: 0L }?.coerceAtLeast(0L) ?: 0L
+
+    /** Effective trim range [trimStart, trimEnd), always inside the project. */
+    val trimStart: Long get() = trimStartFrame.coerceIn(0L, lengthFrames)
+    val trimEnd: Long get() = (trimEndFrame ?: lengthFrames).coerceIn(trimStart, lengthFrames)
+    val isTrimmed: Boolean get() = trimStart > 0L || trimEnd < lengthFrames
 
     companion object {
         const val CURRENT_SCHEMA_VERSION = 1

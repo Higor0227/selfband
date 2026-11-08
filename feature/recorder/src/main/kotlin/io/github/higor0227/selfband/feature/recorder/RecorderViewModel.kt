@@ -21,6 +21,7 @@ import io.github.higor0227.selfband.core.audio.RecordChannelMode
 import io.github.higor0227.selfband.core.audio.RecordingResult
 import io.github.higor0227.selfband.core.audio.TakeAudio
 import io.github.higor0227.selfband.core.audio.TransportState
+import io.github.higor0227.selfband.core.audio.Waveforms
 import io.github.higor0227.selfband.core.audio.alignment
 import io.github.higor0227.selfband.core.audio.calibration.LatencyCalibrator
 import io.github.higor0227.selfband.core.audio.calibration.MeasurementKind
@@ -50,6 +51,8 @@ import io.github.higor0227.selfband.core.model.Take
 import io.github.higor0227.selfband.core.model.TakeVideo
 import io.github.higor0227.selfband.core.model.Track
 import io.github.higor0227.selfband.core.model.TrackEq
+import io.github.higor0227.selfband.core.model.Trim
+import io.github.higor0227.selfband.core.model.Waveform
 import io.github.higor0227.selfband.core.camera.CameraCapabilities
 import io.github.higor0227.selfband.core.camera.CameraControls
 import io.github.higor0227.selfband.core.camera.CameraState
@@ -183,6 +186,8 @@ data class RecorderUiState(
     val panelMode: PanelMode = PanelMode.CAMERA,
     /** Where playback starts and what the canvas shows while idle (project frames). */
     val playheadFrames: Long = 0,
+    /** Peak overviews of the active takes, by take id (loaded in the background). */
+    val waveforms: Map<String, Waveform> = emptyMap(),
 ) {
     val cameraSettings: CameraSettings get() = project?.camera ?: CameraSettings()
     val transport: TransportState get() = status.transport
@@ -202,6 +207,7 @@ class RecorderViewModel @Inject constructor(
     private val profiles: DeviceProfileRepository,
     private val calibrator: LatencyCalibrator,
     private val camera: VideoCamera,
+    private val waveforms: Waveforms,
     canvasFactory: CanvasPreviewFactory,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
@@ -269,6 +275,23 @@ class RecorderViewModel @Inject constructor(
                 local.update { it.copy(ghost = ui) }
             }
         }
+        // Waveforms of the active takes (timeline, SPEC 2.5): load what is missing, drop the rest.
+        viewModelScope.launch {
+            repository.observe(projectId).filterNotNull().map { p ->
+                p.tracks.mapNotNull { track ->
+                    val take = track.activeTake?.takeIf { it.lengthFrames > 0 } ?: return@mapNotNull null
+                    take.id to repository.takeAudioFile(p.id, track.id, take.audioFile)
+                }
+            }.distinctUntilChanged().collectLatest { wanted ->
+                val ids = wanted.map { it.first }.toSet()
+                local.update { s -> s.copy(waveforms = s.waveforms.filterKeys { it in ids }) }
+                for ((takeId, file) in wanted) {
+                    if (local.value.waveforms.containsKey(takeId)) continue
+                    val waveform = waveforms.load(file) ?: continue
+                    local.update { s -> s.copy(waveforms = s.waveforms + (takeId to waveform)) }
+                }
+            }
+        }
         // Device plugged/unplugged: finish any take and reopen on the new route.
         viewModelScope.launch {
             deviceMonitor.devices.drop(1).debounce(DEVICE_DEBOUNCE_MS).collect {
@@ -281,13 +304,13 @@ class RecorderViewModel @Inject constructor(
                 .distinctUntilChanged().filter { it }
                 .collect { if (screenActive) reopen(RecorderNotice.DEVICE_CHANGED) }
         }
-        // Stop playback at the end of the project.
+        // Stop playback at the trim end, or shortly after the end of the project (tails).
         viewModelScope.launch {
             engine.status.collect { s ->
                 val project = uiState.value.project ?: return@collect
-                if (s.transport == TransportState.PLAYING &&
-                    s.positionFrames > project.lengthFrames + project.sampleRate / 2
-                ) stop()
+                val end = if (project.trimEnd < project.lengthFrames) project.trimEnd
+                else project.lengthFrames + project.sampleRate / 2
+                if (s.transport == TransportState.PLAYING && s.positionFrames >= end) stop()
             }
         }
     }
@@ -330,6 +353,20 @@ class RecorderViewModel @Inject constructor(
         viewModelScope.launch {
             repository.update(projectId) { it.copy(canvas = it.canvas.copy(templateId = templateId)) }
         }
+    }
+
+    /** Global trim (SPEC 2.6), clamped to the project; non-destructive. */
+    fun setTrim(startFrame: Long, endFrame: Long) {
+        viewModelScope.launch {
+            repository.update(projectId) { p ->
+                val (start, end) = Trim.normalized(p, startFrame, endFrame)
+                p.copy(trimStartFrame = start, trimEndFrame = end)
+            }
+        }
+    }
+
+    fun clearTrim() {
+        viewModelScope.launch { repository.update(projectId) { it.copy(trimStartFrame = 0, trimEndFrame = null) } }
     }
 
     fun setPlayhead(frames: Long) {
@@ -543,8 +580,10 @@ class RecorderViewModel @Inject constructor(
         viewModelScope.launch {
             ops.withLock {
                 if (engine.status.value.transport == TransportState.IDLE) {
-                    engine.setMetronome(currentProject().metronome, 0)
-                    engine.play(playhead)
+                    val project = currentProject()
+                    engine.setMetronome(project.metronome, 0)
+                    // Playback stays inside the global trim (SPEC 2.6).
+                    engine.play(Trim.playStart(project, playhead))
                 } else {
                     finishTake(engine.stop(), interrupted = false)
                 }
@@ -743,11 +782,16 @@ class RecorderViewModel @Inject constructor(
 
     /** Manual nudge on top of the automatic alignment (SPEC 2.2). Only while idle. */
     fun setManualOffsetMs(trackId: String, ms: Double) {
+        val sampleRate = uiState.value.project?.sampleRate ?: return
+        setManualOffsetFrames(trackId, AlignmentMath.msToFrames(ms, sampleRate))
+    }
+
+    /** Sample-accurate manual offset of the active take (waveform drag, SPEC 2.5). Only while idle. */
+    fun setManualOffsetFrames(trackId: String, frames: Long) {
         viewModelScope.launch {
             ops.withLock {
                 if (engine.status.value.transport != TransportState.IDLE) return@withLock
                 val project = currentProject()
-                val frames = AlignmentMath.msToFrames(ms, project.sampleRate)
                 val updated = repository.update(project.id) { p ->
                     p.copy(tracks = p.tracks.map { track ->
                         if (track.id != trackId) track else track.copy(takes = track.takes.map { take ->
@@ -1174,6 +1218,7 @@ class RecorderViewModel @Inject constructor(
         val project = currentProject()
         val take = project.tracks.firstOrNull { it.id == trackId }?.takes?.firstOrNull { it.id == takeId } ?: return
         repository.takeAudioFile(project.id, trackId, take.audioFile).delete()
+        repository.takeAudioFile(project.id, trackId, take.audioFile + Waveforms.CACHE_SUFFIX).delete()
         repository.takeAudioFile(project.id, trackId, take.video?.file ?: "${take.id}.mp4").delete()
         repository.update(project.id) { p ->
             p.copy(tracks = p.tracks.map { t ->
@@ -1192,6 +1237,7 @@ class RecorderViewModel @Inject constructor(
         val project = currentProject()
         project.tracks.firstOrNull { it.id == trackId }?.takes?.forEach { take ->
             repository.takeAudioFile(project.id, trackId, take.audioFile).delete()
+            repository.takeAudioFile(project.id, trackId, take.audioFile + Waveforms.CACHE_SUFFIX).delete()
             // The video may exist before the take knows about it (recording in progress).
             repository.takeAudioFile(project.id, trackId, take.video?.file ?: "${take.id}.mp4").delete()
         }

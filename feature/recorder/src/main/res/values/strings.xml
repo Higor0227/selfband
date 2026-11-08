@@ -200,4 +200,20 @@
     <string name="eq_peak">Mid band</string>
     <string name="eq_high_shelf">High shelf</string>
     <string name="eq_flat">Flat</string>
+    <!-- Timeline: offset by waveform and global trim (phase 4c) -->
+    <string name="timeline">Timeline</string>
+    <string name="timeline_description">Timeline with one waveform per track</string>
+    <string name="zoom_in">+</string>
+    <string name="zoom_out">−</string>
+    <string name="zoom_fit">Fit</string>
+    <string name="timeline_offset">Track %1$d · manual offset %2$s ms (%3$d samples)</string>
+    <string name="nudge_minus_sample">−1 sample</string>
+    <string name="nudge_plus_sample">+1 sample</string>
+    <string name="nudge_reset">Reset</string>
+    <string name="trim_none">Trim: none (the whole project)</string>
+    <string name="trim_value">Trim: %1$s → %2$s (%3$s)</string>
+    <string name="trim_start_here">Start at playhead</string>
+    <string name="trim_end_here">End at playhead</string>
+    <string name="trim_clear">No trim</string>
+    <string name="timeline_hint">Drag a track sideways to align it; zoom in (+) for precision. Drag the handles on the ruler to trim the start and end. Tap the ruler to move the playhead. Nothing is cut from the files.</string>
 </resources>
