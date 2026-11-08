@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <string name="projects_title">Projects</string>
+    <string name="projects_empty">No projects yet.</string>
+    <string name="open_diagnostics">Audio diagnostics</string>
+</resources>

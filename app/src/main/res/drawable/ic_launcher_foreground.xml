@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder icon (waveform bars) until Phase 7. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M36,40h4v28h-4z M44,46h4v16h-4z M52,34h4v40h-4z M60,44h4v20h-4z M68,38h4v32h-4z" />
+</vector>

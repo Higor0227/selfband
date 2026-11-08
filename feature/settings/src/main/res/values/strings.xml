@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <string name="diagnostics_title">Audio diagnostics</string>
+    <string name="back">Back</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="unknown">Unknown</string>
+    <string name="any">Any</string>
+    <string name="frames_value">%1$d frames</string>
+
+    <string name="section_system">System</string>
+    <string name="native_sample_rate">Native sample rate</string>
+    <string name="native_buffer">Native buffer</string>
+    <string name="low_latency_feature">Low-latency audio feature</string>
+    <string name="pro_audio_feature">Pro audio feature</string>
+    <string name="unprocessed_source">Unprocessed mic source</string>
+
+    <string name="section_outputs">Outputs (%1$d)</string>
+    <string name="section_inputs">Inputs (%1$d)</string>
+    <string name="sample_rates">Sample rates</string>
+
+    <string name="section_probe">Engine test</string>
+    <string name="probe_explainer">Opens a low-latency stream that plays silence and shows what the device actually granted. Plug or unplug devices while it runs to test routing.</string>
+    <string name="probe_include_input">Include input (microphone or interface)</string>
+    <string name="probe_start">Start test</string>
+    <string name="probe_stop">Stop test</string>
+    <string name="probe_restarts">Streams reopened after a route change: %1$d</string>
+    <string name="permission_denied">Microphone permission denied. Input cannot be tested.</string>
+    <string name="start_failed">Could not open the stream: %1$s</string>
+    <string name="stream_output">Output stream</string>
+    <string name="stream_input">Input stream</string>
+    <string name="input_preset">Input preset</string>
+    <string name="not_open">Not open</string>
+    <string name="device">Device</string>
+    <string name="api">API</string>
+    <string name="mmap">MMAP (exclusive path)</string>
+    <string name="sharing">Sharing mode</string>
+    <string name="performance">Performance mode</string>
+    <string name="sample_rate">Sample rate</string>
+    <string name="channels">Channels</string>
+    <string name="format">Format</string>
+    <string name="burst">Burst</string>
+    <string name="buffer">Buffer</string>
+    <string name="capacity">Capacity</string>
+    <string name="latency_estimate">Latency estimate</string>
+    <string name="xruns">Xruns</string>
+    <string name="callbacks">Callbacks</string>
+    <string name="level">Level</string>
+</resources>

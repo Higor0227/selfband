@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <string name="diagnostics_title">Diagnóstico de áudio</string>
+    <string name="back">Voltar</string>
+    <string name="yes">Sim</string>
+    <string name="no">Não</string>
+    <string name="unknown">Desconhecido</string>
+    <string name="any">Qualquer</string>
+    <string name="frames_value">%1$d frames</string>
+
+    <string name="section_system">Sistema</string>
+    <string name="native_sample_rate">Sample rate nativo</string>
+    <string name="native_buffer">Buffer nativo</string>
+    <string name="low_latency_feature">Recurso de áudio de baixa latência</string>
+    <string name="pro_audio_feature">Recurso de áudio profissional</string>
+    <string name="unprocessed_source">Microfone sem processamento</string>
+
+    <string name="section_outputs">Saídas (%1$d)</string>
+    <string name="section_inputs">Entradas (%1$d)</string>
+    <string name="sample_rates">Sample rates</string>
+
+    <string name="section_probe">Teste do motor</string>
+    <string name="probe_explainer">Abre um stream de baixa latência que toca silêncio e mostra o que o aparelho realmente concedeu. Conecte ou desconecte dispositivos durante o teste para verificar a troca de rota.</string>
+    <string name="probe_include_input">Incluir entrada (microfone ou interface)</string>
+    <string name="probe_start">Iniciar teste</string>
+    <string name="probe_stop">Parar teste</string>
+    <string name="probe_restarts">Streams reabertos após troca de rota: %1$d</string>
+    <string name="permission_denied">Permissão de microfone negada. A entrada não pode ser testada.</string>
+    <string name="start_failed">Não foi possível abrir o stream: %1$s</string>
+    <string name="stream_output">Stream de saída</string>
+    <string name="stream_input">Stream de entrada</string>
+    <string name="input_preset">Preset de entrada</string>
+    <string name="not_open">Fechado</string>
+    <string name="device">Dispositivo</string>
+    <string name="api">API</string>
+    <string name="mmap">MMAP (caminho exclusivo)</string>
+    <string name="sharing">Modo de compartilhamento</string>
+    <string name="performance">Modo de desempenho</string>
+    <string name="sample_rate">Sample rate</string>
+    <string name="channels">Canais</string>
+    <string name="format">Formato</string>
+    <string name="burst">Burst</string>
+    <string name="buffer">Buffer</string>
+    <string name="capacity">Capacidade</string>
+    <string name="latency_estimate">Latência estimada</string>
+    <string name="xruns">Xruns</string>
+    <string name="callbacks">Callbacks</string>
+    <string name="level">Nível</string>
+</resources>

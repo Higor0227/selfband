@@ -1,0 +1,41 @@
+# Selfband — project conventions
+
+`SPEC.md` is the source of truth (written in pt-BR). If something in it proves infeasible or a better approach exists, explain and ask before deviating. Track status in `PROGRESS.md`.
+
+## Language
+- Code, comments, commit messages, README, CONTRIBUTING: **English**.
+- UI strings: **pt-BR and en**, always via string resources (`values/` = en, `values-pt-rBR/`). No hardcoded UI text.
+
+## Identity
+- applicationId / base package: `io.github.higor0227.selfband`.
+- Visual identity is a placeholder until Phase 7: Material 3, dynamic color on Android 12+, single seed color in `:core:ui`.
+
+## Modules (SPEC §3.2)
+- `:feature:*` depend only on `:core:*` — **never on another `:feature:*`**.
+- `:core:*` expose interfaces so implementations can be swapped (e.g. CameraX ↔ Camera2). Wire implementations with Hilt in the owning module or `:app`.
+- `:core:model` is pure Kotlin/JVM: no Android dependencies.
+
+## Audio thread (SPEC §3.3)
+- The Oboe callback **never allocates, locks, logs, or does I/O**. No `new`/`malloc`, no `std::mutex`, no `std::vector` growth, no JNI calls, no `__android_log_print` on the audio thread.
+- Talk to it only through lock-free SPSC ring buffers and atomic parameters (smoothed/ramped to avoid clicks).
+- Preallocate everything in `prepare()`/stream open.
+- Master clock = audio frame position. Video follows audio.
+
+## No device-specific behavior (SPEC §1)
+- Never branch on brand, model, manufacturer, or product (`Build.MODEL`, `Build.MANUFACTURER`, USB vendor/product IDs, etc.).
+- Behavior comes only from what is **detected** (device type, channels, sample rates), **measured** (calibration, leak test), or **chosen** by the user (profile).
+
+## Dependencies & licensing
+- License: GPL-3.0-or-later. Every source file starts with `// SPDX-License-Identifier: GPL-3.0-or-later` (or `#` for CMake/scripts).
+- Only add dependencies with GPL-3.0-compatible licenses (Apache-2.0, MIT, BSD, LGPL, MPL-2.0). Check before adding. No proprietary SDKs, no analytics, no network access.
+- All versions go in `gradle/libs.versions.toml`.
+
+## Workflow
+- Implement one SPEC §4 phase at a time. At the end of a phase: build, install on the device, read logcat (tag `Selfband`), fix errors, update `PROGRESS.md`, then stop for the owner to run that phase's checklist. Do not start the next phase without confirmation.
+- The test phone is usually connected via wireless adb (USB-C is busy with the audio interface).
+
+## Build commands
+- `./gradlew assembleDebug` — build debug APK.
+- `./gradlew installDebug` — install on the connected device.
+- `./gradlew test` — unit tests (DSP, alignment math, serialization, layout math).
+- `adb logcat -s Selfband:V` — app logs.
