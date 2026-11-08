@@ -120,4 +120,11 @@ data class RecordingResult(
     val inputLatencyMs: Double?,
     val xrunsDuring: Int,
     val droppedFrames: Long,
+    /**
+     * Output clock: `t * sr / 1e9 - clock` is the output frame presented at CLOCK_MONOTONIC
+     * time `t` (ns). Null when unknown. See AlignmentMath.projectPositionAt.
+     */
+    val outputClockFrames: Double? = null,
+    /** True when [outputClockFrames] is estimated from the buffer size (no timestamps). */
+    val outputClockEstimated: Boolean = false,
 )

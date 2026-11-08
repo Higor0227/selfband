@@ -73,6 +73,8 @@ data class Take(
     val manualOffsetFrames: Long = 0,
     val alignment: AlignmentInfo,
     val createdAtMillis: Long,
+    /** Null for audio-only takes (or when the camera was unavailable). */
+    val video: TakeVideo? = null,
 ) {
     /** Project position of the take's first sample. */
     val startFrame: Long get() = recordStartFrame + autoOffsetFrames + manualOffsetFrames

@@ -53,6 +53,19 @@ object AlignmentMath {
     ): Double =
         (inputTimeNanos - outputTimeNanos) * sampleRate / 1e9 - inputFramePosition + outputFramePosition
 
+    /**
+     * Project position the user hears at CLOCK_MONOTONIC time [timeNanos] during a take
+     * (SPEC 3.4, video alignment). The output frame presented at `t` is
+     * `t * sr / 1e9 - outputClockFrames`; output frame `O_s` played project frame `P_s`.
+     */
+    fun projectPositionAt(
+        timeNanos: Long,
+        outputClockFrames: Double,
+        outputStartFrame: Long,
+        startPosition: Long,
+        sampleRate: Int,
+    ): Double = startPosition + (timeNanos.toDouble() * sampleRate / 1e9 - outputClockFrames) - outputStartFrame
+
     fun framesToMs(frames: Double, sampleRate: Int): Double = frames * 1000.0 / sampleRate
     fun msToFrames(ms: Double, sampleRate: Int): Long = (ms * sampleRate / 1000.0).roundToLong()
 }

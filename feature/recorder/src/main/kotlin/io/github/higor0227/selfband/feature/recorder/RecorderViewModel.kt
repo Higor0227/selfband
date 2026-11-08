@@ -2,6 +2,8 @@
 package io.github.higor0227.selfband.feature.recorder
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -17,6 +19,7 @@ import io.github.higor0227.selfband.core.audio.EngineStatus
 import io.github.higor0227.selfband.core.audio.PlaybackTrack
 import io.github.higor0227.selfband.core.audio.RecordChannelMode
 import io.github.higor0227.selfband.core.audio.RecordingResult
+import io.github.higor0227.selfband.core.audio.TakeAudio
 import io.github.higor0227.selfband.core.audio.TransportState
 import io.github.higor0227.selfband.core.audio.alignment
 import io.github.higor0227.selfband.core.audio.calibration.LatencyCalibrator
@@ -28,6 +31,7 @@ import io.github.higor0227.selfband.core.model.AlignmentMethod
 import io.github.higor0227.selfband.core.model.AudioDevice
 import io.github.higor0227.selfband.core.model.AudioDeviceType
 import io.github.higor0227.selfband.core.model.CalibrationMethod
+import io.github.higor0227.selfband.core.model.CameraLens
 import io.github.higor0227.selfband.core.model.DeviceProfile
 import io.github.higor0227.selfband.core.model.InputChannel
 import io.github.higor0227.selfband.core.model.LatencyCalibration
@@ -37,9 +41,14 @@ import io.github.higor0227.selfband.core.model.Levels
 import io.github.higor0227.selfband.core.model.MetronomeSettings
 import io.github.higor0227.selfband.core.model.Project
 import io.github.higor0227.selfband.core.model.Take
+import io.github.higor0227.selfband.core.model.TakeVideo
 import io.github.higor0227.selfband.core.model.Track
+import io.github.higor0227.selfband.core.camera.CameraState
+import io.github.higor0227.selfband.core.camera.VideoCamera
+import io.github.higor0227.selfband.core.camera.VideoRecording
 import io.github.higor0227.selfband.core.project.DeviceProfileRepository
 import io.github.higor0227.selfband.core.project.ProjectRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
@@ -108,6 +117,21 @@ sealed interface CalibrationUi {
     data class Finished(val task: CalibrationTask, val outcome: CalibrationOutcome) : CalibrationUi
 }
 
+enum class SyncCheckError { NO_PEAK, NO_TIMESTAMP, OUT_OF_RANGE, DECODE }
+
+/** One video frame around the clap; [offset] 0 is where the clap sound falls. */
+data class SyncFrame(val offset: Int, val index: Int, val bitmap: Bitmap?)
+
+/** Clap test (SPEC 4, phase 2): video frames around the loudest sound of a take. */
+data class SyncCheckUi(
+    val trackId: String,
+    val loading: Boolean = true,
+    val frames: List<SyncFrame> = emptyList(),
+    val frameMs: Double = 0.0,
+    val videoOffsetMs: Double = 0.0,
+    val error: SyncCheckError? = null,
+)
+
 data class RecorderUiState(
     val project: Project? = null,
     val status: EngineStatus = EngineStatus(),
@@ -122,6 +146,13 @@ data class RecorderUiState(
     /** Saved profile for [route]; null until something is calibrated or chosen. */
     val profile: DeviceProfile? = null,
     val calibration: CalibrationUi = CalibrationUi.Idle,
+    val camera: CameraState = CameraState(),
+    val cameraPermission: Boolean = false,
+    /** Record video with new tracks (off = audio-only tracks, SPEC 2.2). */
+    val videoEnabled: Boolean = true,
+    val lens: CameraLens = CameraLens.FRONT,
+    val availableLenses: List<CameraLens> = emptyList(),
+    val syncCheck: SyncCheckUi? = null,
 ) {
     val transport: TransportState get() = status.transport
     val isIdle: Boolean get() = transport == TransportState.IDLE
@@ -139,6 +170,7 @@ class RecorderViewModel @Inject constructor(
     private val deviceMonitor: AudioDeviceMonitor,
     private val profiles: DeviceProfileRepository,
     private val calibrator: LatencyCalibrator,
+    private val camera: VideoCamera,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -153,10 +185,17 @@ class RecorderViewModel @Inject constructor(
     /** Profile key and calibration in effect when the current take started. */
     private var recordingCalibration: Pair<String, LatencyCalibration>? = null
     private var calibrationJob: Job? = null
+    /** True while the camera is encoding the current take. */
+    private var videoRecording = false
 
     val uiState: StateFlow<RecorderUiState> =
-        combine(local, repository.observe(projectId), engine.status, profiles.profiles) { l, project, status, all ->
-            l.copy(project = project, status = status, profile = l.route?.let { r -> all.firstOrNull { it.key == r.key } })
+        combine(local, repository.observe(projectId), engine.status, profiles.profiles, camera.state) { l, project, status, all, cam ->
+            l.copy(
+                project = project,
+                status = status,
+                profile = l.route?.let { r -> all.firstOrNull { it.key == r.key } },
+                camera = cam,
+            )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecorderUiState())
 
     init {
@@ -186,16 +225,133 @@ class RecorderViewModel @Inject constructor(
     fun onStart() {
         screenActive = true
         viewModelScope.launch { ops.withLock { openEngine() } }
+        viewModelScope.launch { openCamera() }
     }
 
     fun onStop() {
         screenActive = false
-        viewModelScope.launch { ops.withLock { finishTake(engine.stop(), interrupted = true); engine.close() } }
+        viewModelScope.launch {
+            ops.withLock { finishTake(engine.stop(), interrupted = true); engine.close() }
+            camera.close()
+        }
     }
 
     override fun onCleared() {
         // viewModelScope is cancelled; make sure the take is saved and streams are released.
-        MainScope().launch { ops.withLock { finishTake(engine.stop(), interrupted = true); engine.close() } }
+        MainScope().launch {
+            ops.withLock { finishTake(engine.stop(), interrupted = true); engine.close() }
+            camera.close()
+        }
+    }
+
+    // --- camera (SPEC 2.2, 3.4) ----------------------------------------------------------
+
+    fun setCameraPermission(granted: Boolean) {
+        if (local.value.cameraPermission == granted) return
+        local.update { it.copy(cameraPermission = granted) }
+        if (granted && screenActive) viewModelScope.launch { openCamera() }
+    }
+
+    fun setVideoEnabled(on: Boolean) {
+        if (!uiState.value.isIdle) return
+        local.update { it.copy(videoEnabled = on) }
+        viewModelScope.launch { if (on) openCamera() else camera.close() }
+    }
+
+    fun switchLens() {
+        if (!uiState.value.isIdle) return
+        val lenses = local.value.availableLenses
+        if (lenses.size < 2) return
+        val next = lenses[(lenses.indexOf(local.value.lens) + 1) % lenses.size]
+        local.update { it.copy(lens = next) }
+        viewModelScope.launch { openCamera() }
+    }
+
+    fun setPreviewSurface(surface: android.view.Surface?) {
+        viewModelScope.launch { camera.setPreviewSurface(surface) }
+    }
+
+    private suspend fun openCamera() {
+        val l = local.value
+        if (!l.cameraPermission || !l.videoEnabled || !screenActive) return
+        val lenses = camera.availableLenses()
+        val lens = if (l.lens in lenses) l.lens else lenses.firstOrNull() ?: return
+        local.update { it.copy(availableLenses = lenses, lens = lens) }
+        if (!camera.open(lens)) Log.w(LOG_TAG, "Camera $lens could not be opened: ${camera.state.value.error}")
+    }
+
+    /** Video manual offset, independent of the audio offset (SPEC 3.4). */
+    fun setVideoOffsetMs(trackId: String, ms: Double) {
+        viewModelScope.launch {
+            ops.withLock {
+                if (engine.status.value.transport != TransportState.IDLE) return@withLock
+                updateActiveTake(trackId) { take ->
+                    take.copy(video = take.video?.copy(manualOffsetMs = ms.coerceIn(-MAX_VIDEO_OFFSET_MS, MAX_VIDEO_OFFSET_MS)))
+                }
+            }
+            if (local.value.syncCheck?.trackId == trackId) openSyncCheck(trackId)
+        }
+    }
+
+    fun openSyncCheck(trackId: String) {
+        viewModelScope.launch {
+            val project = currentProject()
+            val track = project.tracks.firstOrNull { it.id == trackId } ?: return@launch
+            val take = track.activeTake ?: return@launch
+            val video = take.video ?: return@launch
+            // Keep the previous frames on screen while recomputing after an adjustment.
+            local.update { s ->
+                val previous = s.syncCheck?.takeIf { it.trackId == trackId }
+                s.copy(syncCheck = previous?.copy(loading = true) ?: SyncCheckUi(trackId))
+            }
+            val result = withContext(Dispatchers.IO) { buildSyncCheck(project, track, take, video) }
+            local.update { if (it.syncCheck?.trackId == trackId) it.copy(syncCheck = result) else it }
+        }
+    }
+
+    /** The user saw the hands close on the frame at [offset]: move the video onto the clap. */
+    fun pickSyncFrame(offset: Int) {
+        val check = local.value.syncCheck ?: return
+        if (offset == 0 || check.frameMs <= 0 || check.loading) return
+        setVideoOffsetMs(check.trackId, check.videoOffsetMs - offset * check.frameMs)
+    }
+
+    fun closeSyncCheck() = local.update { it.copy(syncCheck = null) }
+
+    private fun buildSyncCheck(project: Project, track: Track, take: Take, video: TakeVideo): SyncCheckUi {
+        val sr = project.sampleRate
+        val frameMs = 1000.0 / video.frameRate
+        val base = SyncCheckUi(track.id, loading = false, frameMs = frameMs, videoOffsetMs = video.manualOffsetMs)
+        val peak = TakeAudio.peakFrame(repository.takeAudioFile(project.id, track.id, take.audioFile))
+            ?: return base.copy(error = SyncCheckError.NO_PEAK)
+        val videoStart = video.startFrame(sr) ?: return base.copy(error = SyncCheckError.NO_TIMESTAMP)
+        val clapPosition = take.startFrame + peak
+        val center = Math.round((clapPosition - videoStart) / sr * video.frameRate).toInt()
+        Log.i(LOG_TAG, "Sync check: clap at project frame $clapPosition, video frame $center of ${video.frameCount}")
+        if (center !in 0 until video.frameCount) return base.copy(error = SyncCheckError.OUT_OF_RANGE)
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(repository.takeAudioFile(project.id, track.id, video.file).absolutePath)
+            val last = (retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)?.toIntOrNull()
+                ?: video.frameCount) - 1
+            val frames = (-SYNC_FRAMES..SYNC_FRAMES).mapNotNull { offset ->
+                val index = center + offset
+                if (index !in 0..last) return@mapNotNull null
+                val full = runCatching { retriever.getFrameAtIndex(index) }.getOrNull()
+                val small = full?.let {
+                    val w = SYNC_THUMB_WIDTH
+                    val h = (it.height.toLong() * w / it.width).toInt().coerceAtLeast(1)
+                    Bitmap.createScaledBitmap(it, w, h, true).also { s -> if (s !== it) it.recycle() }
+                }
+                SyncFrame(offset, index, small)
+            }
+            if (frames.none { it.bitmap != null }) base.copy(error = SyncCheckError.DECODE) else base.copy(frames = frames)
+        } catch (e: Exception) {
+            Log.e(LOG_TAG, "Sync check failed", e)
+            base.copy(error = SyncCheckError.DECODE)
+        } finally {
+            runCatching { retriever.release() }
+        }
     }
 
     fun togglePlay() {
@@ -215,7 +371,7 @@ class RecorderViewModel @Inject constructor(
         viewModelScope.launch { ops.withLock { finishTake(engine.stop(), interrupted = false) } }
     }
 
-    fun recordNewTrack() {
+    fun recordNewTrack(displayRotationDegrees: Int = 0) {
         viewModelScope.launch {
             ops.withLock {
                 if (engine.status.value.transport != TransportState.IDLE) return@withLock
@@ -247,10 +403,20 @@ class RecorderViewModel @Inject constructor(
                 // with the count-in clicks in the headphones (never in the recording).
                 val countIn = project.metronome.countInFrames(project.sampleRate)
                 engine.setMetronome(project.metronome, countIn)
+                // Video first: its first frame is placed on the timeline by timestamp, so it
+                // may start before or after the audio; starting it first just avoids a gap.
+                val wantVideo = local.value.videoEnabled && camera.state.value.isOpen
+                videoRecording = wantVideo &&
+                    camera.startRecording(repository.takeAudioFile(project.id, trackId, "$takeId.mp4"), displayRotationDegrees)
+                if (wantVideo && !videoRecording) Log.w(LOG_TAG, "Video did not start; recording audio only")
                 if (engine.record(file, -countIn, mode)) {
                     recordingTrackId = trackId
                 } else {
                     Log.e(LOG_TAG, "Could not start recording")
+                    if (videoRecording) {
+                        videoRecording = false
+                        camera.stopRecording()
+                    }
                     removeTrack(trackId)
                     local.update { it.copy(notice = RecorderNotice.RECORD_FAILED) }
                 }
@@ -619,7 +785,11 @@ class RecorderViewModel @Inject constructor(
 
     /** Saves the take that was being recorded (if any) with its automatic alignment. */
     private suspend fun finishTake(result: RecordingResult?, interrupted: Boolean) {
-        val trackId = recordingTrackId ?: return
+        val video = if (videoRecording) {
+            videoRecording = false
+            camera.stopRecording()
+        } else null
+        val trackId = recordingTrackId ?: run { video?.file?.delete(); return }
         recordingTrackId = null
         // Nothing past the count-in (stopped before project frame 0): drop the take.
         if (result == null || result.frames <= 0 || result.startPosition + result.frames <= 0) {
@@ -638,6 +808,16 @@ class RecorderViewModel @Inject constructor(
             "Take saved: ${result.frames} frames, offset=${alignment.autoOffsetFrames} frames " +
                 "(${alignment.info.method}, residual ${"%.1f".format(residualFrames)}), interrupted=$interrupted",
         )
+        val takeVideo = video?.let { toTakeVideo(it, result, project.sampleRate) }
+        takeVideo?.startPositionFrames?.let { start ->
+            val audioStart = result.startPosition + alignment.autoOffsetFrames
+            Log.i(
+                LOG_TAG,
+                "Video placed at ${"%.1f".format(AlignmentMath.framesToMs(start, project.sampleRate))} ms, " +
+                    "audio take at ${"%.1f".format(AlignmentMath.framesToMs(audioStart.toDouble(), project.sampleRate))} ms " +
+                    "(clock ${takeVideo.clock}${if (result.outputClockEstimated) ", output clock estimated" else ""})",
+            )
+        }
         val updated = repository.update(project.id) { p ->
             p.copy(tracks = p.tracks.map { track ->
                 if (track.id != trackId) track else track.copy(takes = track.takes.map { take ->
@@ -647,6 +827,7 @@ class RecorderViewModel @Inject constructor(
                         recordStartFrame = result.startPosition,
                         autoOffsetFrames = alignment.autoOffsetFrames,
                         alignment = alignment.info,
+                        video = takeVideo,
                     )
                 })
             })
@@ -657,10 +838,44 @@ class RecorderViewModel @Inject constructor(
         if (engine.status.value.isOpen) loadTracks(updated)
     }
 
+    /** Places the recorded video on the project timeline using the audio output clock. */
+    private fun toTakeVideo(v: VideoRecording, result: RecordingResult, sampleRate: Int): TakeVideo {
+        val clock = result.outputClockFrames
+        val first = v.firstFrameMonotonicNanos
+        val start = if (first != null && clock != null) {
+            AlignmentMath.projectPositionAt(first, clock, result.outputStartFrame, result.startPosition, sampleRate)
+        } else null
+        if (start == null) Log.w(LOG_TAG, "Video not aligned: camera clock ${v.clock}, output clock ${clock != null}")
+        return TakeVideo(
+            file = v.file.name,
+            lens = v.lens,
+            width = v.width,
+            height = v.height,
+            rotationDegrees = v.rotationDegrees,
+            previewMirrored = v.lens == CameraLens.FRONT,
+            frameRate = v.frameRate,
+            frameCount = v.frameCount,
+            durationUs = v.durationUs,
+            startPositionFrames = start,
+            clock = v.clock,
+        )
+    }
+
+    private suspend fun updateActiveTake(trackId: String, transform: (Take) -> Take): Project =
+        repository.update(projectId) { p ->
+            p.copy(tracks = p.tracks.map { track ->
+                if (track.id != trackId) track else track.copy(takes = track.takes.map { take ->
+                    if (take.id == track.activeTakeId) transform(take) else take
+                })
+            })
+        }
+
     private suspend fun removeTrack(trackId: String) {
         val project = currentProject()
         project.tracks.firstOrNull { it.id == trackId }?.takes?.forEach { take ->
             repository.takeAudioFile(project.id, trackId, take.audioFile).delete()
+            // The video may exist before the take knows about it (recording in progress).
+            repository.takeAudioFile(project.id, trackId, take.video?.file ?: "${take.id}.mp4").delete()
         }
         repository.update(project.id) { p -> p.copy(tracks = p.tracks.filterNot { it.id == trackId }) }
     }
@@ -670,6 +885,10 @@ class RecorderViewModel @Inject constructor(
         private const val DEVICE_DEBOUNCE_MS = 400L
         private const val TAP_RESET_MS = 2_000L
         private const val STATUS_WAIT_MS = 1_000L
+        private const val MAX_VIDEO_OFFSET_MS = 2_000.0
+        /** Frames shown on each side of the clap in the sync check. */
+        private const val SYNC_FRAMES = 3
+        private const val SYNC_THUMB_WIDTH = 360
         // Track names are user data (renaming comes later); the number is what matters.
         private const val TRACK_NAME_PREFIX = "#"
     }

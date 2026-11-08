@@ -82,16 +82,20 @@ import java.util.Locale
 @Composable
 fun RecorderRoute(onBack: () -> Unit, viewModel: RecorderViewModel = hiltViewModel()) {
     val context = LocalContext.current
-    var granted by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                PackageManager.PERMISSION_GRANTED,
-        )
+    fun has(permission: String) =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+    var granted by remember { mutableStateOf(has(Manifest.permission.RECORD_AUDIO)) }
+    // The camera is optional: without it, tracks are audio-only (SPEC 2.2).
+    var cameraGranted by remember { mutableStateOf(has(Manifest.permission.CAMERA)) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        granted = result[Manifest.permission.RECORD_AUDIO] ?: granted
+        cameraGranted = result[Manifest.permission.CAMERA] ?: cameraGranted
     }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        granted = it
+    LaunchedEffect(Unit) {
+        val missing = listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA).filterNot { has(it) }
+        if (missing.isNotEmpty()) launcher.launch(missing.toTypedArray())
     }
-    LaunchedEffect(Unit) { if (!granted) launcher.launch(Manifest.permission.RECORD_AUDIO) }
+    LaunchedEffect(cameraGranted) { viewModel.setCameraPermission(cameraGranted) }
 
     // The engine runs only while the screen is visible. Going to the background stops and
     // saves the current take (SPEC section 5: interrupted takes are kept).
@@ -131,6 +135,15 @@ fun RecorderRoute(onBack: () -> Unit, viewModel: RecorderViewModel = hiltViewMod
             onSaveCalibration = viewModel::saveCalibration,
             onCloseCalibration = viewModel::closeCalibration,
         ),
+        video = VideoActions(
+            onPreviewSurface = viewModel::setPreviewSurface,
+            onSwitchLens = viewModel::switchLens,
+            onVideoEnabled = viewModel::setVideoEnabled,
+            onCheckSync = viewModel::openSyncCheck,
+            onPickSyncFrame = viewModel::pickSyncFrame,
+            onSetVideoOffset = viewModel::setVideoOffsetMs,
+            onCloseSyncCheck = viewModel::closeSyncCheck,
+        ),
     )
 }
 
@@ -141,7 +154,7 @@ fun RecorderScreen(
     permissionGranted: Boolean,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
-    onRecord: () -> Unit,
+    onRecord: (Int) -> Unit,
     onStop: () -> Unit,
     onToggleMute: (String) -> Unit,
     onPreviewVolume: (String, Double) -> Unit,
@@ -153,6 +166,7 @@ fun RecorderScreen(
     onChannelMode: (RecordChannelMode) -> Unit,
     onDismissNotice: () -> Unit,
     device: DeviceActions,
+    video: VideoActions,
 ) {
     val recording = state.transport == TransportState.RECORDING
     KeepScreenOnAndLockRotation(recording)
@@ -196,8 +210,26 @@ fun RecorderScreen(
             onSave = device.onSaveCalibration,
             onClose = device.onCloseCalibration,
         )
+        val syncTrack = state.project?.tracks?.firstOrNull { it.id == state.syncCheck?.trackId }
+        SyncCheckDialog(
+            ui = state.syncCheck,
+            mirrored = syncTrack?.activeTake?.video?.previewMirrored == true,
+            onPickFrame = video.onPickSyncFrame,
+            onResetOffset = { state.syncCheck?.let { video.onSetVideoOffset(it.trackId, 0.0) } },
+            onClose = video.onCloseSyncCheck,
+        )
+        val view = LocalView.current
+        Column(Modifier.fillMaxSize().padding(padding)) {
+        if (permissionGranted) {
+            CameraPanel(
+                state = state,
+                onPreviewSurface = video.onPreviewSurface,
+                onSwitchLens = video.onSwitchLens,
+                onVideoEnabled = video.onVideoEnabled,
+            )
+        }
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier.fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -219,7 +251,11 @@ fun RecorderScreen(
                     onCalibrate = device.onCalibrate,
                 )
             }
-            item { TransportCard(state, onTogglePlay, onRecord, onStop) }
+            item {
+                TransportCard(state, onTogglePlay, {
+                    onRecord((view.display?.rotation ?: android.view.Surface.ROTATION_0) * 90)
+                }, onStop)
+            }
             state.project?.let { project ->
                 item { MetronomeCard(project.metronome, onUpdateMetronome, onTapTempo) }
             }
@@ -242,9 +278,11 @@ fun RecorderScreen(
                     onSetVolume = { onSetVolume(track.id, it) },
                     onSetManualOffset = { onSetManualOffset(track.id, it) },
                     onDelete = { onDeleteTrack(track.id) },
+                    onCheckSync = { video.onCheckSync(track.id) },
                 )
             }
             item { EngineInfo(state) }
+        }
         }
     }
 }
@@ -308,7 +346,10 @@ private fun TransportCard(
                     else -> Button(onClick = onStop) { Text(stringResource(R.string.stop)) }
                 }
             }
-            val bytesPerSecond = sampleRate.toLong() * 4 * if (state.channelMode == RecordChannelMode.STEREO && s.inputChannels >= 2) 2 else 1
+            val audioBytesPerSecond = sampleRate.toLong() * 4 * if (state.channelMode == RecordChannelMode.STEREO && s.inputChannels >= 2) 2 else 1
+            // Video at the encoder's bit rate (16 Mbit/s for 1080p30).
+            val videoBytesPerSecond = if (state.videoEnabled && state.camera.isOpen) 2_000_000L else 0L
+            val bytesPerSecond = audioBytesPerSecond + videoBytesPerSecond
             val remainingSec = if (bytesPerSecond > 0) state.freeBytes / bytesPerSecond else 0
             Text(
                 stringResource(
@@ -335,6 +376,7 @@ private fun TrackCard(
     onSetVolume: (Double) -> Unit,
     onSetManualOffset: (Double) -> Unit,
     onDelete: () -> Unit,
+    onCheckSync: () -> Unit,
 ) {
     val take = track.activeTake
     var offsetDialog by remember { mutableStateOf(false) }
@@ -361,6 +403,29 @@ private fun TrackCard(
                             stringResource(R.string.manual_offset_value, String.format(Locale.ROOT, "%+.1f", manualMs)),
                             style = MaterialTheme.typography.bodySmall,
                         )
+                    }
+                    val video = take.video
+                    if (video == null) {
+                        Text(stringResource(R.string.audio_only), style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                stringResource(
+                                    if (video.startPositionFrames == null) R.string.video_not_aligned else R.string.video_info,
+                                    stringResource(video.lens.labelRes()),
+                                    video.frameRate,
+                                ) + if (video.manualOffsetMs != 0.0) {
+                                    " · " + stringResource(R.string.video_offset_value, String.format(Locale.ROOT, "%+.1f", video.manualOffsetMs))
+                                } else "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (video.startPositionFrames == null) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            TextButton(onClick = onCheckSync, enabled = canEdit && video.startPositionFrames != null) {
+                                Text(stringResource(R.string.check_sync))
+                            }
+                        }
                     }
                     if (take.alignment.xrunsDuringTake > 0 || take.alignment.droppedFrames > 0) {
                         Text(stringResource(R.string.take_glitched_short), color = MaterialTheme.colorScheme.error,
@@ -469,6 +534,11 @@ private fun EngineInfo(state: RecorderUiState) {
             s.outputLatencyMs?.let { String.format(Locale.ROOT, "%.1f ms", it) } ?: "?",
             s.inputLatencyMs?.let { String.format(Locale.ROOT, "%.1f ms", it) } ?: "?"),
         "xruns out ${s.outputXruns ?: "?"} / in ${s.inputXruns ?: "?"} · underruns ${s.underruns} · dropped ${s.droppedFrames}",
+    ) + listOfNotNull(
+        state.camera.takeIf { it.isOpen }?.let { c ->
+            "camera ${c.lens} · sensor ${c.sensorOrientation}° · clock ${c.clock}" +
+                (c.previewSize?.let { " · preview ${it.width}×${it.height}" } ?: "")
+        },
     )
     Column {
         Spacer(Modifier.height(8.dp))
@@ -511,6 +581,17 @@ private fun formatTime(frames: Long, sampleRate: Int): String {
     val totalMs = kotlin.math.abs(frames) * 1000 / sampleRate.coerceAtLeast(1)
     return sign + String.format(Locale.ROOT, "%d:%02d.%03d", totalMs / 60_000, (totalMs / 1000) % 60, totalMs % 1000)
 }
+
+/** Callbacks for the camera panel and the sync check. */
+data class VideoActions(
+    val onPreviewSurface: (android.view.Surface?) -> Unit,
+    val onSwitchLens: () -> Unit,
+    val onVideoEnabled: (Boolean) -> Unit,
+    val onCheckSync: (String) -> Unit,
+    val onPickSyncFrame: (Int) -> Unit,
+    val onSetVideoOffset: (String, Double) -> Unit,
+    val onCloseSyncCheck: () -> Unit,
+)
 
 /** Callbacks for the device card and the calibration dialog. */
 data class DeviceActions(

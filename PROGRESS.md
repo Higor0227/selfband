@@ -4,7 +4,7 @@ Status against the phases in `SPEC.md` §4.
 
 ## Current phase: Phase 2 — Camera (in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). **2b is in progress.** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -129,3 +129,56 @@ Split into milestones (owner's choice): **1a** engine + recording + playback + m
 - Sample rate choice per device is only recorded (last used), not applied: the engine always runs at the project rate (Oboe resamples if the device differs), per SPEC 3.3.
 - Software monitoring latency is the output buffer plus up to two input blocks (a few ms on MMAP); with OpenSL ES or Bluetooth it is much higher.
 
+## Phase 2 — Camera
+**Decision (owner, 2026-11-08):** Camera2 + MediaCodec + MediaMuxer instead of CameraX (SPEC 3.1 allows the fallback). CameraX does not tell which sensor timestamp the first recorded frame has, and the clap test needs ±1 frame. The implementation sits behind the `VideoCamera` interface in `:core:camera`, so it can be swapped.
+
+### 2a — Done (confirmed by owner on 2026-11-08: clap test 0 frames off)
+- `:core:camera`: `Camera2VideoCamera` (Hilt singleton). It opens the camera by the facing the platform reports (front/back/external). Video size is 1080p or the best 16:9 size below it that the encoder accepts; AE runs at 30 fps fixed when available, with continuous-video AF. One capture session holds the preview surface and a **persistent encoder surface**; the repeating request targets the encoder only while recording, so starting a take does not rebuild the session. Camera operations are serialized with a mutex.
+- `VideoEncoder`: H.264 at 16 Mbit/s, keyframe every 1 s, MP4 with the rotation in the header (no audio track; the take's audio is the WAV). One codec per take; it is re-prepared after each stop.
+- **Video ↔ audio sync (SPEC 3.4):**
+  - The encoder's PTS are the camera's sensor timestamps. On Android 13+ the encoder output is pinned to the sensor timestamp base. Older versions may get them converted to MONOTONIC; `stopRecording` detects which by matching the first PTS against the take's capture results.
+  - Time of the first frame = timestamp + exposure/2 + rolling-shutter skew/2 (middle of the exposure, middle row).
+  - The sensor clock is detected at runtime by comparing frame timestamps with CLOCK_MONOTONIC and CLOCK_BOOTTIME. The declared `SENSOR_INFO_TIMESTAMP_SOURCE` is only a tie-break. BOOTTIME is converted to MONOTONIC.
+  - The audio engine now exports its **output clock** (median of `t·sr − framePosition` over the take, from `getTimestamp(CLOCK_MONOTONIC)`). From it, `AlignmentMath.projectPositionAt(t)` gives the project position being heard at camera time `t`, which is stored as `TakeVideo.startPositionFrames`. "Video follows audio": the video is placed on the timeline the performer was hearing.
+  - Each take stores its own manual video offset (`manualOffsetMs`), separate from the audio offset.
+- Recorder:
+  - Camera and microphone permissions are requested together; without the camera, tracks are audio-only.
+  - Camera panel above the list: TextureView preview with the correct aspect and display rotation (the front camera is mirrored by the platform), a Video on/off switch, a lens switch and the size/fps.
+  - "Record new track" starts the video first, then the audio. Stop finalizes the MP4 as `<takeId>.mp4` next to the WAV.
+  - The track shows "Vídeo (câmera …)" or "Só áudio". Free space accounts for video.
+  - The diagnostics line shows the camera, sensor orientation and detected clock.
+- **"Verificar sincronia" (clap test):**
+  - It finds the loudest sample of the take's WAV and maps it to the video frame where that sound falls.
+  - It shows that frame (highlighted, "som") with 3 frames on each side, decoded from the MP4 and mirrored like the preview.
+  - Tapping another frame moves the video so that frame lines up with the sound; "Zerar" resets the offset.
+- Unit tests: 33 (new: `projectPositionAt`, `TakeVideo.startFrame`, sensor clock detection: monotonic, boottime after sleep, ambiguous, unrelated).
+- On the phone (front camera, built-in mic + speaker):
+  - Preview OK in portrait.
+  - Test take: the first frame matched its capture result ("sensor base", exposure 33 ms, skew 12 ms, sensor clock BOOTTIME). The video was placed 142 ms after the start of the audio take (camera start-up), which is plausible.
+  - The sync-check dialog opened and showed the frames.
+  - I deleted my test track afterwards.
+
+### Fixed during the 2a smoke test
+- **The owner's first two takes (recorded on the first 2a build) have their video placed ~33 h off.** On this phone the sensor clock is BOOTTIME. The camera service hands the encoder its timestamps already converted to MONOTONIC, and the first build converted them again. Also, the first frame's exposure could fall out of an 8 s buffer. Both are fixed: sensor timestamp base on API 33+, PTS-clock matching, and the first 120 capture results of each take kept. Those two takes can't be checked; delete them and record new ones.
+- A race between two session builds (the dispatcher does not serialize across suspensions) → mutex.
+
+### 2a checklist (owner)
+1. **Preview:** open a project. You see the front camera, upright, not stretched, mirrored like a mirror. Rotate the phone to landscape: still upright with the right aspect. "Câmera: frontal" switches to the back camera and back.
+2. **Recording with video:** record a track with video. The red dot shows on the preview during the take. After Stop, the track says "Vídeo (câmera frontal, 30 fps)". Record a second one with the back camera.
+3. **Clap test (main criterion, SPEC 4 phase 2):**
+   - Headphones or interface as usual, metronome on or off.
+   - Record a take and clap once, loud, with your hands clearly visible.
+   - Open "Verificar sincronia" on that track. The hands should be closing exactly on the highlighted "som" frame, or on −1/+1. **Don't tap any frame yet**: tell me which frame it was (−3…+3).
+   - Repeat 3 times, ideally with each camera and in portrait and landscape. If it is consistently off by the same amount, that is a systematic offset I can fix in the mapping.
+   - The highlighted frame is placed by the loudest sound in the take, so avoid louder sounds (or count-in clicks through the speaker into the mic).
+4. **Manual video offset:** tap a neighbouring frame. The dialog recomputes with the video moved, and the track shows "vídeo ±x ms". "Zerar" goes back to 0.
+5. **Audio-only:** turn "Vídeo" off and record: the track says "Só áudio". Deny the camera permission in system settings, then reopen: a message instead of the preview, and recording still works.
+6. **Interruptions:** go home in the middle of a take with video. The take is kept with its video, just as audio takes were in phase 1.
+7. Optional: send me a take's MP4 + WAV (or `adb pull` the project) and I can check the frame numerically.
+
+### 2a known issues / notes
+- If the app is killed in the middle of a take, the MP4 is lost (it is only finalized at Stop). The WAV is recovered as before. Fragmented MP4 would fix this; to decide later.
+- The video's place on the timeline does not include the calibration residual. The residual is mostly the input/analog path, which the video does not go through. If the clap test shows a constant error equal to the residual, I will add it.
+- Video plays nowhere yet (the studio / multi-video player is phase 3). The sync check is the only way to look at it for now.
+- Lens/resolution choice and AE/AWB/AF locks, grid, stabilization and ghost come in 2b.
+- The preview runs during calibration; it does not affect the measurement, but it does use CPU.

@@ -296,6 +296,9 @@ oboe::Result AudioEngine::open(const StreamConfig &config) {
     mInDisconnected.store(false);
     mIoCount = 0;
     mIoNext = 0;
+    mClkCount = 0;
+    mClkNext = 0;
+    mClkEstimated = false;
 
     oboe::AudioStreamBuilder out;
     out.setDirection(oboe::Direction::Output)
@@ -660,7 +663,10 @@ void AudioEngine::stopTransportLocked(double *recResult, int32_t capacity) {
     }
     if (hadTake && recResult != nullptr && capacity >= kRrCount) {
         const bool usable = streamsUsableLocked();
-        if (usable) sampleIoOffsetLocked();
+        if (usable) {
+            sampleIoOffsetLocked();
+            sampleOutputClockLocked();
+        }
         double spread = 0.0;
         const double io = ioOffsetMedianLocked(&spread);
         auto latOut = usable ? mOutput->calculateLatencyMillis() : oboe::ResultWithValue<double>(oboe::Result::ErrorNull);
@@ -677,6 +683,16 @@ void AudioEngine::stopTransportLocked(double *recResult, int32_t capacity) {
         recResult[kRrInLatencyMs] = latIn ? latIn.value() : -1.0;
         recResult[kRrXRunsDuring] = totalXRunsLocked() - mRecXRunsAtStart;
         recResult[kRrDropped] = static_cast<double>(mRecDropped.load());
+        if (mClkCount > 0) {
+            double sorted[kIoWindow];
+            std::copy(mClkSamples, mClkSamples + mClkCount, sorted);
+            std::sort(sorted, sorted + mClkCount);
+            recResult[kRrOutClock] = sorted[mClkCount / 2];
+            recResult[kRrOutClockValid] = mClkEstimated ? 2.0 : 1.0;
+        } else {
+            recResult[kRrOutClock] = 0.0;
+            recResult[kRrOutClockValid] = 0.0;
+        }
         SB_LOGI("Take finished: %lld frames, ch=%d, O_s=%lld I_s=%lld ioOffset=%.1f (spread %.1f, n=%d) "
                 "xruns=%d dropped=%lld",
                 static_cast<long long>(mRecFrames.load()), mRecChannels,
@@ -700,6 +716,32 @@ void AudioEngine::sampleIoOffsetLocked() {
     mIoSamples[mIoNext] = value;
     mIoNext = (mIoNext + 1) % kIoWindow;
     if (mIoCount < kIoWindow) ++mIoCount;
+}
+
+void AudioEngine::sampleOutputClockLocked() {
+    if (!mOutput || mOutDisconnected.load() || mOutput->getState() == oboe::StreamState::Closed) return;
+    double value;
+    bool estimated = false;
+    if (auto ts = mOutput->getTimestamp(CLOCK_MONOTONIC)) {
+        value = static_cast<double>(ts.value().timestamp) * mSampleRate / 1e9 -
+                static_cast<double>(ts.value().position);
+    } else {
+        // No timestamps (e.g. OpenSL ES): assume the frame being presented now is the one
+        // written a full buffer ago.
+        timespec now{};
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        const double t = static_cast<double>(now.tv_sec) * 1e9 + static_cast<double>(now.tv_nsec);
+        const double presented = static_cast<double>(mOutput->getFramesWritten()) -
+                                 static_cast<double>(mOutput->getBufferSizeInFrames());
+        value = t * mSampleRate / 1e9 - presented;
+        estimated = true;
+    }
+    if (estimated && mClkCount > 0 && !mClkEstimated) return; // keep real timestamps
+    if (!estimated && mClkEstimated) mClkCount = 0;            // drop estimates
+    mClkEstimated = estimated;
+    mClkSamples[mClkNext] = value;
+    mClkNext = (mClkNext + 1) % kIoWindow;
+    if (mClkCount < kIoWindow) ++mClkCount;
 }
 
 double AudioEngine::ioOffsetMedianLocked(double *spread) const {
@@ -744,6 +786,7 @@ void AudioEngine::fillStatus(double *o, int32_t capacity) {
     if (!streamsUsableLocked()) return;
 
     sampleIoOffsetLocked();
+    sampleOutputClockLocked();
     double spread = 0.0;
     o[kEsIoOffset] = ioOffsetMedianLocked(&spread);
     o[kEsIoOffsetValid] = mIoCount > 0 ? 1.0 : 0.0;

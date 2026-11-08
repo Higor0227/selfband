@@ -97,4 +97,28 @@
     <string name="calibration_no_signal">The test sounds were not detected. Check the volume, the cable or the microphone position, and try again.</string>
     <string name="calibration_inconsistent">The measurements did not agree with each other. Try again in a quieter place.</string>
     <string name="calibration_interrupted">The measurement was interrupted (the audio device changed or the engine stopped).</string>
+    <!-- Camera (phase 2) -->
+    <string name="camera_permission_needed">No camera permission: new tracks are audio-only. You can allow it in the system settings.</string>
+    <string name="video_off">Video off: new tracks are audio-only.</string>
+    <string name="camera_error">Camera unavailable: %1$s</string>
+    <string name="camera_opening">Opening the camera…</string>
+    <string name="video_toggle">Video</string>
+    <string name="switch_camera">Camera: %1$s</string>
+    <string name="lens_front">front</string>
+    <string name="lens_back">back</string>
+    <string name="lens_external">external</string>
+    <string name="audio_only">Audio only</string>
+    <string name="video_info">Video (%1$s camera, %2$d fps)</string>
+    <string name="video_not_aligned">Video (%1$s camera, %2$d fps) not aligned: the camera clock is unknown</string>
+    <string name="video_offset_value">video %1$s ms</string>
+    <string name="check_sync">Check sync</string>
+    <string name="close">Close</string>
+    <string name="sync_title">Sync check</string>
+    <string name="sync_intro">Record a take clapping once, loud, in front of the camera. The highlighted frame is where the clap is heard: the hands should close on it, or one frame away. If they close on another frame, tap that frame to move the video.</string>
+    <string name="sync_clap_frame">sound</string>
+    <string name="sync_video_offset">Video offset: %1$s ms (%2$s frames)</string>
+    <string name="sync_no_peak">No sound found in this take.</string>
+    <string name="sync_no_timestamp">This video has no timestamp to align it with the audio.</string>
+    <string name="sync_out_of_range">The loudest sound of the take is outside the video.</string>
+    <string name="sync_decode">Could not read the video frames.</string>
 </resources>

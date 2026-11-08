@@ -130,6 +130,8 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
             inputLatencyMs = r[REC_IN_LATENCY].takeIf { it >= 0 },
             xrunsDuring = r[REC_XRUNS].toInt(),
             droppedFrames = r[REC_DROPPED].toLong(),
+            outputClockFrames = r[REC_OUT_CLOCK].takeIf { r[REC_OUT_CLOCK_VALID] > 0 },
+            outputClockEstimated = r[REC_OUT_CLOCK_VALID] == 2.0,
         )
     }
 
@@ -235,7 +237,9 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
         const val REC_IN_LATENCY = 9
         const val REC_XRUNS = 10
         const val REC_DROPPED = 11
-        const val REC_COUNT = 12
+        const val REC_OUT_CLOCK = 12
+        const val REC_OUT_CLOCK_VALID = 13
+        const val REC_COUNT = 14
 
         init {
             System.loadLibrary("selfband_audio")

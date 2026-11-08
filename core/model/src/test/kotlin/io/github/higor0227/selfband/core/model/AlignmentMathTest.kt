@@ -61,4 +61,33 @@ class AlignmentMathTest {
         assertEquals(424L, take.startFrame)
         assertEquals(48_424L, take.endFrame)
     }
+
+    /**
+     * The output clock says frame `pos` was heard at `t`. A camera frame captured 250 ms
+     * later belongs where the project was being heard 250 ms after that frame.
+     */
+    @Test
+    fun projectPositionAtFollowsTheOutputClock() {
+        val tNs = 50_000_000_000L
+        val outPos = 1_000_000L
+        val clock = tNs.toDouble() * sr / 1e9 - outPos   // t*sr - pos
+        val outputStart = 900_000L                         // O_s at record start
+        val startPosition = -96_000L                       // P_s (count-in of 2 s)
+        // Output frame heard at tNs is outPos; project position = P_s + (outPos - O_s).
+        val atT = AlignmentMath.projectPositionAt(tNs, clock, outputStart, startPosition, sr)
+        assertEquals((startPosition + outPos - outputStart).toDouble(), atT, 1e-6)
+        val later = AlignmentMath.projectPositionAt(tNs + 250_000_000L, clock, outputStart, startPosition, sr)
+        assertEquals(atT + 0.25 * sr, later, 1e-6)
+    }
+
+    @Test
+    fun takeVideoStartIncludesManualOffset() {
+        val v = TakeVideo(
+            file = "a.mp4", lens = CameraLens.FRONT, width = 1920, height = 1080, rotationDegrees = 270,
+            previewMirrored = true, frameRate = 30, frameCount = 300, durationUs = 10_000_000,
+            startPositionFrames = 4_800.0, manualOffsetMs = -33.3, clock = VideoClock.MONOTONIC,
+        )
+        assertEquals(4_800.0 - 33.3 * 48, v.startFrame(sr)!!, 1e-6)
+        assertEquals(null, v.copy(startPositionFrames = null).startFrame(sr))
+    }
 }

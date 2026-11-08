@@ -98,4 +98,28 @@
     <string name="calibration_no_signal">Os sons de teste não foram detectados. Confira o volume, o cabo ou a posição do microfone e tente de novo.</string>
     <string name="calibration_inconsistent">As medições não bateram entre si. Tente de novo num lugar mais silencioso.</string>
     <string name="calibration_interrupted">A medição foi interrompida (o dispositivo de áudio mudou ou o motor parou).</string>
+    <!-- Câmera (fase 2) -->
+    <string name="camera_permission_needed">Sem permissão de câmera: as novas faixas serão só de áudio. Você pode permitir nas configurações do sistema.</string>
+    <string name="video_off">Vídeo desligado: as novas faixas serão só de áudio.</string>
+    <string name="camera_error">Câmera indisponível: %1$s</string>
+    <string name="camera_opening">Abrindo a câmera…</string>
+    <string name="video_toggle">Vídeo</string>
+    <string name="switch_camera">Câmera: %1$s</string>
+    <string name="lens_front">frontal</string>
+    <string name="lens_back">traseira</string>
+    <string name="lens_external">externa</string>
+    <string name="audio_only">Só áudio</string>
+    <string name="video_info">Vídeo (câmera %1$s, %2$d fps)</string>
+    <string name="video_not_aligned">Vídeo (câmera %1$s, %2$d fps) sem alinhamento: o relógio da câmera é desconhecido</string>
+    <string name="video_offset_value">vídeo %1$s ms</string>
+    <string name="check_sync">Verificar sincronia</string>
+    <string name="close">Fechar</string>
+    <string name="sync_title">Verificar sincronia</string>
+    <string name="sync_intro">Grave um take batendo uma palma forte, uma vez, na frente da câmera. O quadro destacado é onde a palma é ouvida: as mãos devem se fechar nele, ou a um quadro de distância. Se fecharem em outro quadro, toque nesse quadro para mover o vídeo.</string>
+    <string name="sync_clap_frame">som</string>
+    <string name="sync_video_offset">Ajuste do vídeo: %1$s ms (%2$s quadros)</string>
+    <string name="sync_no_peak">Nenhum som encontrado neste take.</string>
+    <string name="sync_no_timestamp">Este vídeo não tem marca de tempo para alinhá-lo ao áudio.</string>
+    <string name="sync_out_of_range">O som mais alto do take está fora do vídeo.</string>
+    <string name="sync_decode">Não foi possível ler os quadros do vídeo.</string>
 </resources>

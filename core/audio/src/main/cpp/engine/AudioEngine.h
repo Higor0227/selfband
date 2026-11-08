@@ -62,6 +62,8 @@ enum RecResultField : int32_t {
     kRrInLatencyMs,
     kRrXRunsDuring,
     kRrDropped,
+    kRrOutClock,           // median of t_out * sr / 1e9 - pos_out (frames, CLOCK_MONOTONIC)
+    kRrOutClockValid,      // 1 = from timestamps, 2 = estimated from the buffer size, 0 = none
     kRrCount
 };
 
@@ -171,6 +173,7 @@ private:
     void writerLoop();
     void sampleIoOffsetLocked();
     double ioOffsetMedianLocked(double *spread) const;
+    void sampleOutputClockLocked();
     int32_t totalXRunsLocked() const;
 
     std::mutex mControlLock;
@@ -254,6 +257,12 @@ private:
     double mIoSamples[kIoWindow] = {};
     int mIoCount = 0;
     int mIoNext = 0;
+    // Output clock window: t_out * sr / 1e9 - pos_out, so that the output frame presented at
+    // monotonic time t is t * sr / 1e9 - clock (used to place video frames on the timeline).
+    double mClkSamples[kIoWindow] = {};
+    int mClkCount = 0;
+    int mClkNext = 0;
+    bool mClkEstimated = false;
 };
 
 } // namespace selfband
