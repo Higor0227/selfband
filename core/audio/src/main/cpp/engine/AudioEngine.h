@@ -11,7 +11,9 @@
 
 #include <oboe/Oboe.h>
 
+#include "engine/Equalizer.h"
 #include "engine/Limiter.h"
+#include "engine/Reverb.h"
 #include "engine/SpscRing.h"
 #include "engine/WavFile.h"
 
@@ -87,8 +89,10 @@ enum RecordChannelMode : int32_t { kRecFirst = 0, kRecSecond = 1, kRecStereo = 2
 struct TrackConfig {
     std::string path;
     int64_t startFrame = 0; // project frame of the take's first sample
-    float gainL = 1.0f;     // volume, pan, mute and solo already folded in
+    float gainL = 1.0f;     // volume, pan, mute, solo and phase already folded in
     float gainR = 1.0f;
+    float eq[Equalizer::kParamCount] = {1, 0, 80, 120, 0, 1000, 0, 1, 8000, 0};
+    float send = 0.0f;      // reverb send (linear), taken after the track gains
 };
 
 /**
@@ -120,8 +124,20 @@ public:
 
     /** Replaces the playback tracks. Only while the transport is idle. */
     bool setTracks(const std::vector<TrackConfig> &tracks);
-    /** Smoothly changes a track's left/right gains on the master bus (0 = silent). Any time. */
+    /**
+     * Smoothly changes a track's left/right gains on the master bus (0 = silent, negative =
+     * phase inverted). Any time.
+     */
     void setTrackGain(int32_t index, float gainL, float gainR);
+
+    /** Track EQ parameters, in Equalizer::Param order (smoothed). Any time. */
+    void setTrackEq(int32_t index, const float *params, int32_t count);
+
+    /** Track reverb send level (linear, ramped). Any time. */
+    void setTrackSend(int32_t index, float send);
+
+    /** Reverb parameters, in Reverb::Param order (smoothed). Any time. */
+    void setReverb(const float *params, int32_t count);
 
     /** Master volume (ramped) and clipping protection on/off. Any time. */
     void setMaster(float gain, bool limiter);
@@ -177,6 +193,9 @@ private:
         float currentL = 1.0f; // audio thread only
         float currentR = 1.0f; // audio thread only
         std::atomic<float> peak{0.0f};
+        Equalizer eq;           // prepared in setTracks()/open()
+        std::atomic<float> sendTarget{0.0f};
+        float sendCurrent = 0.0f; // audio thread only
     };
 
     void mixMetronome(float *out, int32_t numFrames, int32_t outChannels, int64_t position);
@@ -230,6 +249,7 @@ private:
     std::unique_ptr<float[]> mRecScratch;
     std::unique_ptr<float[]> mTrackScratch;
     std::unique_ptr<float[]> mMasterScratch; // stereo, mTrackScratchFrames
+    std::unique_ptr<float[]> mReverbScratch; // stereo, mTrackScratchFrames (summed sends)
     std::unique_ptr<float[]> mMonitorScratch;
     int32_t mMonitorScratchFrames = 0;
     int32_t mTrackScratchFrames = 0;
@@ -270,6 +290,7 @@ private:
     float mMasterGain = 1.0f;            // audio thread only
     std::atomic<bool> mLimiterEnabled{true};
     Limiter mLimiter;                    // audio thread only (prepared in open)
+    Reverb mReverb;                      // send bus; prepared in open
     std::atomic<float> mMasterPeakL{0.0f};
     std::atomic<float> mMasterPeakR{0.0f};
     std::atomic<float> mLimiterGain{1.0f};

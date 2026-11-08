@@ -92,6 +92,10 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream *stream, vo
     const int32_t requested = mRequested.load(std::memory_order_acquire);
     if (requested != mCurrent) {
         if (requested != kIdle) {
+            const int32_t count = mTrackCount.load(std::memory_order_acquire);
+            for (int32_t t = 0; t < count; ++t) mTracks[t]->eq.reset();
+            mReverb.reset();
+            mLimiter.reset();
             mPosition = mStartPosition.load(std::memory_order_relaxed);
             mRecOutStart.store(stream->getFramesWritten(), std::memory_order_relaxed);
             mRecInStart.store(inStart, std::memory_order_relaxed);
@@ -106,7 +110,9 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream *stream, vo
     const int32_t frames = std::min(numFrames, mTrackScratchFrames);
     float *scratch = mTrackScratch.get();
     float *master = mMasterScratch.get();
+    float *reverbIn = mReverbScratch.get();
     std::memset(master, 0, static_cast<size_t>(frames) * 2 * sizeof(float));
+    std::memset(reverbIn, 0, static_cast<size_t>(frames) * 2 * sizeof(float));
     for (int32_t t = 0; t < trackCount; ++t) {
         TrackStream &track = *mTracks[t];
         const size_t want = static_cast<size_t>(frames) * 2;
@@ -124,8 +130,14 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream *stream, vo
             track.peak.store(heldPeak, std::memory_order_relaxed);
             continue;
         }
+        // EQ (pre-fader), then gains, then the post-fader reverb send.
+        track.eq.process(scratch, frames);
         const float stepL = (l1 - l0) / static_cast<float>(frames);
         const float stepR = (r1 - r0) / static_cast<float>(frames);
+        const float s0 = track.sendCurrent;
+        const float s1 = track.sendTarget.load(std::memory_order_relaxed);
+        const bool sending = s0 != 0.0f || s1 != 0.0f;
+        const float stepS = (s1 - s0) / static_cast<float>(frames);
         float peak = 0.0f;
         for (int32_t f = 0; f < frames; ++f) {
             const float k = static_cast<float>(f + 1); // ramp: no zipper clicks
@@ -134,11 +146,21 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream *stream, vo
             peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
             master[2 * f] += l;
             master[2 * f + 1] += r;
+            if (sending) {
+                const float s = s0 + stepS * k;
+                reverbIn[2 * f] += l * s;
+                reverbIn[2 * f + 1] += r * s;
+            }
         }
         track.currentL = l1;
         track.currentR = r1;
+        track.sendCurrent = s1;
         track.peak.store(std::max(peak, heldPeak), std::memory_order_relaxed);
     }
+
+    // Reverb bus: the summed sends become the wet signal, which returns to the master.
+    mReverb.process(reverbIn, frames);
+    for (int32_t i = 0, n = frames * 2; i < n; ++i) master[i] += reverbIn[i];
 
     // Master: volume (ramped), clipping protection, meters, then out to the device.
     {
@@ -389,7 +411,10 @@ oboe::Result AudioEngine::open(const StreamConfig &config) {
     mTrackScratchFrames = std::max(mOutput->getBufferCapacityInFrames(), kInputScratchFrames);
     mTrackScratch.reset(new float[static_cast<size_t>(mTrackScratchFrames) * 2]);
     mMasterScratch.reset(new float[static_cast<size_t>(mTrackScratchFrames) * 2]);
+    mReverbScratch.reset(new float[static_cast<size_t>(mTrackScratchFrames) * 2]);
     mLimiter.prepare(mSampleRate);
+    mReverb.prepare(mSampleRate, mTrackScratchFrames);
+    for (auto &track : mTracks) track->eq.prepare(mSampleRate, mTrackScratchFrames);
     mMasterGain = mMasterGainTarget.load();
     mRecRing.allocate(static_cast<size_t>(kRecordRingSeconds * mSampleRate * 2));
     mMonitorScratchFrames = kInputScratchFrames;
@@ -548,6 +573,10 @@ bool AudioEngine::setTracks(const std::vector<TrackConfig> &tracks) {
         track->targetR.store(cfg.gainR);
         track->currentL = cfg.gainL;
         track->currentR = cfg.gainR;
+        for (int32_t p = 0; p < Equalizer::kParamCount; ++p) track->eq.setParam(p, cfg.eq[p]);
+        track->eq.prepare(mSampleRate, mTrackScratchFrames);
+        track->sendTarget.store(std::max(0.0f, cfg.send));
+        track->sendCurrent = std::max(0.0f, cfg.send);
         mTracks.push_back(std::move(track));
     }
     SB_LOGI("Engine: %zu track(s) loaded", mTracks.size());
@@ -557,9 +586,28 @@ bool AudioEngine::setTracks(const std::vector<TrackConfig> &tracks) {
 void AudioEngine::setTrackGain(int32_t index, float gainL, float gainR) {
     std::lock_guard<std::mutex> lock(mControlLock);
     if (index >= 0 && index < static_cast<int32_t>(mTracks.size())) {
-        mTracks[index]->targetL.store(std::max(0.0f, gainL), std::memory_order_relaxed);
-        mTracks[index]->targetR.store(std::max(0.0f, gainR), std::memory_order_relaxed);
+        mTracks[index]->targetL.store(gainL, std::memory_order_relaxed);
+        mTracks[index]->targetR.store(gainR, std::memory_order_relaxed);
     }
+}
+
+void AudioEngine::setTrackEq(int32_t index, const float *params, int32_t count) {
+    std::lock_guard<std::mutex> lock(mControlLock);
+    if (index < 0 || index >= static_cast<int32_t>(mTracks.size())) return;
+    const int32_t n = std::min(count, static_cast<int32_t>(Equalizer::kParamCount));
+    for (int32_t p = 0; p < n; ++p) mTracks[index]->eq.setParam(p, params[p]);
+}
+
+void AudioEngine::setTrackSend(int32_t index, float send) {
+    std::lock_guard<std::mutex> lock(mControlLock);
+    if (index >= 0 && index < static_cast<int32_t>(mTracks.size())) {
+        mTracks[index]->sendTarget.store(std::max(0.0f, send), std::memory_order_relaxed);
+    }
+}
+
+void AudioEngine::setReverb(const float *params, int32_t count) {
+    const int32_t n = std::min(count, static_cast<int32_t>(Reverb::kParamCount));
+    for (int32_t p = 0; p < n; ++p) mReverb.setParam(p, params[p]);
 }
 
 void AudioEngine::setMaster(float gain, bool limiter) {

@@ -52,12 +52,17 @@ ENGINE_FN(jint, nativeOpen)(JNIEnv *, jclass, jlong handle, jint sampleRate, jin
 ENGINE_FN(void, nativeClose)(JNIEnv *, jclass, jlong handle) { asEngine(handle)->close(); }
 
 ENGINE_FN(jboolean, nativeSetTracks)(JNIEnv *env, jclass, jlong handle, jobjectArray paths,
-                                     jlongArray startFrames, jfloatArray gains) {
-    // gains: left/right pairs, two per track.
+                                     jlongArray startFrames, jfloatArray gains, jfloatArray eqs,
+                                     jfloatArray sends) {
+    // gains: left/right pairs, two per track. eqs: Equalizer::kParamCount values per track.
     const jsize count = env->GetArrayLength(paths);
     std::vector<selfband::TrackConfig> tracks(static_cast<size_t>(count));
     jlong *starts = env->GetLongArrayElements(startFrames, nullptr);
     jfloat *g = env->GetFloatArrayElements(gains, nullptr);
+    jfloat *e = env->GetFloatArrayElements(eqs, nullptr);
+    jfloat *s = env->GetFloatArrayElements(sends, nullptr);
+    const jsize eqCount = env->GetArrayLength(eqs);
+    constexpr jsize kEq = selfband::Equalizer::kParamCount;
     for (jsize i = 0; i < count; ++i) {
         auto path = static_cast<jstring>(env->GetObjectArrayElement(paths, i));
         tracks[i].path = toStdString(env, path);
@@ -65,9 +70,15 @@ ENGINE_FN(jboolean, nativeSetTracks)(JNIEnv *env, jclass, jlong handle, jobjectA
         tracks[i].startFrame = starts[i];
         tracks[i].gainL = g[2 * i];
         tracks[i].gainR = g[2 * i + 1];
+        if ((i + 1) * kEq <= eqCount) {
+            for (jsize p = 0; p < kEq; ++p) tracks[i].eq[p] = e[i * kEq + p];
+        }
+        tracks[i].send = s[i];
     }
     env->ReleaseLongArrayElements(startFrames, starts, JNI_ABORT);
     env->ReleaseFloatArrayElements(gains, g, JNI_ABORT);
+    env->ReleaseFloatArrayElements(eqs, e, JNI_ABORT);
+    env->ReleaseFloatArrayElements(sends, s, JNI_ABORT);
     return asEngine(handle)->setTracks(tracks) ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -78,6 +89,24 @@ ENGINE_FN(void, nativeSetTrackGain)(JNIEnv *, jclass, jlong handle, jint index, 
 
 ENGINE_FN(void, nativeSetMaster)(JNIEnv *, jclass, jlong handle, jfloat gain, jboolean limiter) {
     asEngine(handle)->setMaster(gain, limiter == JNI_TRUE);
+}
+
+ENGINE_FN(void, nativeSetTrackEq)(JNIEnv *env, jclass, jlong handle, jint index, jfloatArray params) {
+    const jsize n = env->GetArrayLength(params);
+    jfloat *p = env->GetFloatArrayElements(params, nullptr);
+    asEngine(handle)->setTrackEq(index, p, n);
+    env->ReleaseFloatArrayElements(params, p, JNI_ABORT);
+}
+
+ENGINE_FN(void, nativeSetTrackSend)(JNIEnv *, jclass, jlong handle, jint index, jfloat send) {
+    asEngine(handle)->setTrackSend(index, send);
+}
+
+ENGINE_FN(void, nativeSetReverb)(JNIEnv *env, jclass, jlong handle, jfloatArray params) {
+    const jsize n = env->GetArrayLength(params);
+    jfloat *p = env->GetFloatArrayElements(params, nullptr);
+    asEngine(handle)->setReverb(p, n);
+    env->ReleaseFloatArrayElements(params, p, JNI_ABORT);
 }
 
 ENGINE_FN(jboolean, nativeStartTransport)(JNIEnv *env, jclass, jlong handle, jlong fromFrame,

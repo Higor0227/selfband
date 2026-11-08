@@ -177,4 +177,27 @@
     <string name="mixer_limiter_hint">Keeps peaks below −1 dBFS</string>
     <string name="mixer_limiter_off">Off: loud mixes may clip</string>
     <string name="mixer_limiting">Reducing %1$s dB</string>
+    <!-- Mixer effects (phase 4b) -->
+    <string name="mixer_eq_short">EQ</string>
+    <string name="mixer_phase">Invert phase</string>
+    <string name="mixer_send">Rev</string>
+    <string name="mixer_reverb">Reverb</string>
+    <string name="reverb_small_room">Small room</string>
+    <string name="reverb_room">Room</string>
+    <string name="reverb_hall">Hall</string>
+    <string name="reverb_plate">Plate</string>
+    <string name="reverb_size">Size</string>
+    <string name="reverb_decay">Decay</string>
+    <string name="reverb_pre_delay">Pre-delay</string>
+    <string name="reverb_damping">Damping</string>
+    <string name="reverb_return">Return</string>
+    <string name="reverb_hint">One reverb for the whole mix. Each track feeds it with its "Rev" send.</string>
+    <string name="eq_title">EQ · track %1$d</string>
+    <string name="eq_curve">EQ response curve</string>
+    <string name="eq_enabled">EQ on (off = bypass)</string>
+    <string name="eq_high_pass">High-pass (cuts lows)</string>
+    <string name="eq_low_shelf">Low shelf</string>
+    <string name="eq_peak">Mid band</string>
+    <string name="eq_high_shelf">High shelf</string>
+    <string name="eq_flat">Flat</string>
 </resources>

@@ -51,6 +51,11 @@ data class Track(
     val pan: Float = 0f,
     /** While any track is soloed, only soloed tracks are heard (mute still wins). */
     val solo: Boolean = false,
+    /** Inverts the polarity of the track (advanced; fixes cancellation between two mics). */
+    val phaseInverted: Boolean = false,
+    val eq: TrackEq = TrackEq(),
+    /** Reverb send in dB, taken after the fader. [Levels.MIN_DB] or below means no send. */
+    val reverbSendDb: Double = Levels.MIN_DB,
 ) {
     val activeTake: Take?
         get() = takes.firstOrNull { it.id == activeTakeId } ?: takes.lastOrNull()

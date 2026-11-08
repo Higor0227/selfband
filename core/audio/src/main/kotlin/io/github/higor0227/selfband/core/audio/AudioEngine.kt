@@ -3,7 +3,9 @@ package io.github.higor0227.selfband.core.audio
 
 import io.github.higor0227.selfband.core.model.AlignmentMath
 import io.github.higor0227.selfband.core.model.MetronomeSettings
+import io.github.higor0227.selfband.core.model.ReverbSettings
 import io.github.higor0227.selfband.core.model.StereoGain
+import io.github.higor0227.selfband.core.model.TrackEq
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
 
@@ -29,6 +31,15 @@ interface AudioEngine {
 
     /** Master volume (linear, ramped) and clipping protection. Any time. */
     suspend fun setMaster(gain: Float, limiter: Boolean)
+
+    /** EQ of the track at [index] (smoothed, no clicks). Any time. */
+    suspend fun setTrackEq(index: Int, eq: TrackEq)
+
+    /** Reverb send of the track at [index], linear, post-fader (see Mixing.sendGain). Any time. */
+    suspend fun setTrackSend(index: Int, send: Float)
+
+    /** The master send reverb. Any time. */
+    suspend fun setReverb(reverb: ReverbSettings)
 
     /**
      * Metronome clicks (headphones only). [countInFrames] > 0 also plays count-in clicks for
@@ -73,7 +84,14 @@ sealed interface EngineOpenResult {
     data class Failed(val reason: String) : EngineOpenResult
 }
 
-data class PlaybackTrack(val file: File, val startFrame: Long, val gain: StereoGain)
+data class PlaybackTrack(
+    val file: File,
+    val startFrame: Long,
+    val gain: StereoGain,
+    val eq: TrackEq = TrackEq(),
+    /** Linear reverb send (0 = none). */
+    val send: Float = 0f,
+)
 
 /** Which input channels a take records. */
 enum class RecordChannelMode(val nativeValue: Int) { FIRST(0), SECOND(1), STEREO(2) }

@@ -178,4 +178,27 @@
     <string name="mixer_limiter_hint">Mantém os picos abaixo de −1 dBFS</string>
     <string name="mixer_limiter_off">Desligada: mixagens altas podem distorcer</string>
     <string name="mixer_limiting">Reduzindo %1$s dB</string>
+    <!-- Mixer effects (phase 4b) -->
+    <string name="mixer_eq_short">EQ</string>
+    <string name="mixer_phase">Inverter fase</string>
+    <string name="mixer_send">Rev</string>
+    <string name="mixer_reverb">Reverb</string>
+    <string name="reverb_small_room">Sala pequena</string>
+    <string name="reverb_room">Sala</string>
+    <string name="reverb_hall">Hall</string>
+    <string name="reverb_plate">Plate</string>
+    <string name="reverb_size">Tamanho</string>
+    <string name="reverb_decay">Decaimento</string>
+    <string name="reverb_pre_delay">Pré-delay</string>
+    <string name="reverb_damping">Amortecimento</string>
+    <string name="reverb_return">Retorno</string>
+    <string name="reverb_hint">Um reverb para a mixagem toda. Cada trilha o alimenta pelo envio "Rev".</string>
+    <string name="eq_title">EQ · trilha %1$d</string>
+    <string name="eq_curve">Curva de resposta do EQ</string>
+    <string name="eq_enabled">EQ ligado (desligado = bypass)</string>
+    <string name="eq_high_pass">Passa-altas (corta graves)</string>
+    <string name="eq_low_shelf">Graves (shelf)</string>
+    <string name="eq_peak">Banda de médios</string>
+    <string name="eq_high_shelf">Agudos (shelf)</string>
+    <string name="eq_flat">Zerar</string>
 </resources>

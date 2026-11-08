@@ -12,9 +12,13 @@ import io.github.higor0227.selfband.core.audio.PresentationClock
 import io.github.higor0227.selfband.core.audio.RecordChannelMode
 import io.github.higor0227.selfband.core.audio.RecordingResult
 import io.github.higor0227.selfband.core.audio.TransportState
+import io.github.higor0227.selfband.core.model.EqMath
 import io.github.higor0227.selfband.core.model.LOG_TAG
 import io.github.higor0227.selfband.core.model.MetronomeSettings
+import io.github.higor0227.selfband.core.model.Mixing
+import io.github.higor0227.selfband.core.model.ReverbSettings
 import io.github.higor0227.selfband.core.model.StereoGain
+import io.github.higor0227.selfband.core.model.TrackEq
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -100,6 +104,8 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
             tracks.map { it.file.absolutePath }.toTypedArray(),
             tracks.map { it.startFrame }.toLongArray(),
             tracks.flatMap { listOf(it.gain.left, it.gain.right) }.toFloatArray(),
+            tracks.flatMap { EqMath.nativeParams(it.eq).asList() }.toFloatArray(),
+            tracks.map { it.send }.toFloatArray(),
         )
     }
 
@@ -109,6 +115,18 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
 
     override suspend fun setMaster(gain: Float, limiter: Boolean): Unit = withContext(control) {
         nativeSetMaster(handle, gain, limiter)
+    }
+
+    override suspend fun setTrackEq(index: Int, eq: TrackEq): Unit = withContext(control) {
+        nativeSetTrackEq(handle, index, EqMath.nativeParams(eq))
+    }
+
+    override suspend fun setTrackSend(index: Int, send: Float): Unit = withContext(control) {
+        nativeSetTrackSend(handle, index, send)
+    }
+
+    override suspend fun setReverb(reverb: ReverbSettings): Unit = withContext(control) {
+        nativeSetReverb(handle, Mixing.reverbParams(reverb))
     }
 
     override suspend fun play(fromFrame: Long): Boolean = withContext(control) {
@@ -281,7 +299,11 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
         @JvmStatic private external fun nativeClose(handle: Long)
         @JvmStatic private external fun nativeSetTracks(
             handle: Long, paths: Array<String>, startFrames: LongArray, gains: FloatArray,
+            eqs: FloatArray, sends: FloatArray,
         ): Boolean
+        @JvmStatic private external fun nativeSetTrackEq(handle: Long, index: Int, params: FloatArray)
+        @JvmStatic private external fun nativeSetTrackSend(handle: Long, index: Int, send: Float)
+        @JvmStatic private external fun nativeSetReverb(handle: Long, params: FloatArray)
         @JvmStatic private external fun nativeSetTrackGain(handle: Long, index: Int, gainL: Float, gainR: Float)
         @JvmStatic private external fun nativeSetMaster(handle: Long, gain: Float, limiter: Boolean)
         @JvmStatic private external fun nativeStartTransport(

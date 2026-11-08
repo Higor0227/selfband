@@ -182,6 +182,13 @@ fun RecorderRoute(
             onSetMaster = viewModel::setMasterVolume,
             onLimiter = viewModel::setLimiter,
             onReset = viewModel::resetMix,
+            onTogglePhase = viewModel::togglePhase,
+            onPreviewEq = viewModel::previewTrackEq,
+            onSetEq = viewModel::setTrackEq,
+            onPreviewSend = viewModel::previewTrackSend,
+            onSetSend = viewModel::setTrackSend,
+            onPreviewReverb = viewModel::previewReverb,
+            onSetReverb = viewModel::setReverb,
         ),
     )
 }

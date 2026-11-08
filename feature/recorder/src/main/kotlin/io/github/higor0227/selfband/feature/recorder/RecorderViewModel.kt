@@ -45,9 +45,11 @@ import io.github.higor0227.selfband.core.model.MetronomeSettings
 import io.github.higor0227.selfband.core.model.MixerSettings
 import io.github.higor0227.selfband.core.model.Mixing
 import io.github.higor0227.selfband.core.model.Project
+import io.github.higor0227.selfband.core.model.ReverbSettings
 import io.github.higor0227.selfband.core.model.Take
 import io.github.higor0227.selfband.core.model.TakeVideo
 import io.github.higor0227.selfband.core.model.Track
+import io.github.higor0227.selfband.core.model.TrackEq
 import io.github.higor0227.selfband.core.camera.CameraCapabilities
 import io.github.higor0227.selfband.core.camera.CameraControls
 import io.github.higor0227.selfband.core.camera.CameraState
@@ -685,13 +687,30 @@ class RecorderViewModel @Inject constructor(
 
     fun setLimiter(on: Boolean) = saveMix { p -> p.copy(mixer = p.mixer.copy(limiter = on)) }
 
-    /** Resets every track's volume, pan, mute and solo, and the master (limiter back on). */
+    /** Resets every track's volume, pan, mute, solo and phase, and the master (limiter back on). */
     fun resetMix() = saveMix { p ->
         p.copy(
-            mixer = MixerSettings(),
-            tracks = p.tracks.map { it.copy(volumeDb = 0.0, pan = 0f, muted = false, solo = false) },
+            // EQ, sends and the reverb are kept: they have their own reset/presets.
+            mixer = MixerSettings(reverb = p.mixer.reverb),
+            tracks = p.tracks.map { it.copy(volumeDb = 0.0, pan = 0f, muted = false, solo = false, phaseInverted = false) },
         )
     }
+
+    fun togglePhase(trackId: String) = saveMix { p -> p.updateTrack(trackId) { it.copy(phaseInverted = !it.phaseInverted) } }
+
+    fun previewTrackEq(trackId: String, eq: TrackEq) = previewMix { p -> p.updateTrack(trackId) { it.copy(eq = eq) } }
+
+    fun setTrackEq(trackId: String, eq: TrackEq) = saveMix { p -> p.updateTrack(trackId) { it.copy(eq = eq) } }
+
+    fun previewTrackSend(trackId: String, db: Double) =
+        previewMix { p -> p.updateTrack(trackId) { it.copy(reverbSendDb = db) } }
+
+    fun setTrackSend(trackId: String, db: Double) =
+        saveMix { p -> p.updateTrack(trackId) { it.copy(reverbSendDb = db.coerceIn(Levels.MIN_DB, Mixing.MAX_SEND_DB)) } }
+
+    fun previewReverb(reverb: ReverbSettings) = previewMix { p -> p.copy(mixer = p.mixer.copy(reverb = reverb)) }
+
+    fun setReverb(reverb: ReverbSettings) = saveMix { p -> p.copy(mixer = p.mixer.copy(reverb = reverb)) }
 
     private fun Project.updateTrack(trackId: String, transform: (Track) -> Track): Project =
         copy(tracks = tracks.map { if (it.id == trackId) transform(it) else it })
@@ -705,14 +724,20 @@ class RecorderViewModel @Inject constructor(
         viewModelScope.launch { applyMix(repository.update(projectId, transform)) }
     }
 
-    /** Pushes every track's gains (solo affects all of them) and the master to the engine. */
+    /**
+     * Pushes every track's gains (solo affects all of them), EQ and send, the reverb and the
+     * master to the engine. The engine smooths each value, so repeating unchanged ones is free.
+     */
     private suspend fun applyMix(project: Project) {
         val anySolo = Mixing.anySolo(project)
         val byId = project.tracks.associateBy { it.id }
         engineTrackIds.forEachIndexed { index, id ->
             val track = byId[id] ?: return@forEachIndexed
             engine.setTrackGain(index, Mixing.trackGain(track, anySolo))
+            engine.setTrackEq(index, track.eq)
+            engine.setTrackSend(index, Mixing.sendGain(track))
         }
+        engine.setReverb(project.mixer.reverb)
         engine.setMaster(Mixing.masterGain(project.mixer), project.mixer.limiter)
     }
 
@@ -1034,9 +1059,12 @@ class RecorderViewModel @Inject constructor(
                     file = repository.takeAudioFile(project.id, track.id, take.audioFile),
                     startFrame = take.startFrame,
                     gain = Mixing.trackGain(track, anySolo),
+                    eq = track.eq,
+                    send = Mixing.sendGain(track),
                 )
             },
         )
+        engine.setReverb(project.mixer.reverb)
         engine.setMaster(Mixing.masterGain(project.mixer), project.mixer.limiter)
         local.update { it.copy(freeBytes = repository.freeBytes(), engineTrackIds = engineTrackIds) }
     }

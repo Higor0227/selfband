@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 4 — Basic mixing (4a done; 4b next)
+## Current phase: Phase 4 — Basic mixing (4a and 4b done; 4c next)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -469,3 +469,51 @@ Split into milestones (owner's choice): **1a** engine + recording + playback + m
 - Model: `Track.pan`, `Track.solo`, `Project.mixer` (`MixerSettings`: master volume, limiter on). Older projects read as centered, not soloed, limiter on. 4 new tests, 60 unit tests in total.
 - Meters show silence while stopped (the engine holds the last peak when idle).
 - On the phone: the Mixer chip, the card, M/S/volume/pan rows and the master row appeared in a test project with 2 audio tracks; no errors in logcat. The test project was deleted. The owner tried it and confirmed it works.
+
+### 4b — EQ per track + send reverb (confirmed by the owner on 2026-11-08)
+Built while the owner was away (no device access); installed afterwards and confirmed by the owner on the phone.
+
+- **Track EQ** (SPEC 2.5): the "EQ" chip on each mixer row opens a dialog.
+  - Contents: response curve (20 Hz–20 kHz, ±18 dB); EQ on/off (bypass, the settings are kept); high-pass 20–300 Hz (12 dB/oct, on/off); low shelf 40–500 Hz; mid peaking band 60 Hz–12 kHz with Q 0.3–8; high shelf 2–16 kHz. Gains are ±15 dB.
+  - Frequency sliders are logarithmic. Tap a gain or Q value to reset it. "Zerar" flattens the EQ.
+  - The chip is highlighted when the EQ changes the sound.
+- **Phase invert**: the "Ø" chip (SPEC lists it as optional/advanced). It is folded into the track gains as a negative gain.
+- **Reverb send**: "Rev" slider per track, −∞…+6 dB, post-fader (a muted or silenced track sends nothing). Off by default.
+- **Reverb** section in the mixer card:
+  - presets Sala pequena / Sala / Hall / Plate;
+  - size, decay (RT60 0.3–8 s), pre-delay 0–200 ms, damping, return level (−∞…+6 dB);
+  - moving a room control turns the preset into custom; the return level keeps the preset.
+- **Native DSP** (`core/audio/src/main/cpp/engine`):
+  - `Effect.h`: the common interface from SPEC 3.3 (`prepare`, `reset`, `process`, `setParam`).
+  - `Equalizer.h`: RBJ cookbook biquads in transposed direct form II.
+    - Parameters are atomics, smoothed per block (~30 ms); coefficients are recomputed only when something moved.
+    - Bypass and high-pass on/off crossfade over ~20 ms.
+  - `Reverb.h`: Freeverb-style design, written for this project (8 damped combs + 4 allpasses per channel, stereo spread, pre-delay).
+    - Size scales the delay lengths. Buffers are allocated at the largest size in `prepare()`.
+    - Decay sets each comb's feedback for the requested RT60, so size and decay are independent.
+  - Signal flow per track: EQ (pre-fader) → gain/pan/phase ramp → master, plus a post-fader send → reverb bus.
+    - The reverb's wet output returns to the master before master volume and the limiter.
+  - EQ, reverb and limiter state reset when the transport starts.
+  - Nothing on the audio thread allocates, locks or logs.
+- **Model:** `Track.eq` (`TrackEq`), `Track.reverbSendDb`, `Track.phaseInverted`, `MixerSettings.reverb` (`ReverbSettings`, `ReverbPreset`). Older projects read with a flat EQ, no send, the "Sala" reverb.
+  - `EqMath` in `core:model` has the same RBJ formulas as the native EQ (curve + tests).
+- "Zerar" in the mixer now also clears phase invert. It keeps EQ, sends and the reverb (they have their own reset and presets).
+- 8 new tests (EQ response: flat, peak, high-pass −3 dB / 12 dB per octave, shelves, bypass; phase; presets; old JSON). 68 unit tests in total.
+
+### 4b checklist (owner)
+Use headphones for the reverb tests, and a project with 2+ tracks (ideally one with a voice or a percussive instrument).
+1. Open the project, tap **Mixer**. Each track row now has **EQ**, **Ø**, **M**, **S** and a **Rev** slider. Below the tracks is the **Reverb** section, then Master.
+2. Play. Raise **Rev** on one track: the reverb appears, and only on that track. Lower it to −∞: the tail fades out naturally (no cut, no click).
+3. Try the presets **Sala pequena → Sala → Hall → Plate** while playing: each sounds clearly different, with no pops. Move **Decaimento**: the tail gets longer or shorter. **Tamanho** may cause a brief artifact while dragging (expected: the delay lengths jump).
+4. **Retorno** to −∞ removes all reverb; back to 0 dB brings it back.
+5. Mute a track that has a send: its reverb stops too (post-fader). Solo another track: only its reverb is heard.
+6. Tap **EQ** on a track. Turn on **Passa-altas** and move it to ~300 Hz: the lows go away; the curve shows it. Boost **Banda de médios** +12 dB and sweep the frequency: a clear "wah" sweep with no zipper noise. Try the shelves.
+7. Switch **EQ ligado** off and on while playing: it switches smoothly (no click). The curve goes gray when off. **Zerar** flattens it. The **EQ** chip is highlighted only while the EQ changes the sound.
+8. **Ø** on one of two tracks with the same content (or two mics on one source): they partly cancel. Off restores it.
+9. Leave and reopen the project: EQ, sends, phase and reverb settings are kept.
+10. Record a new take while a reverb/EQ is active: the recording is unaffected (dry input) and still aligned. Check the logcat for errors and xruns during playback with reverb on.
+
+### 4b known issues / notes
+- Confirmed on the device by the owner.
+- Dragging the reverb **size** can cause a short artifact (the delay lengths jump; smoothing them would bend the pitch of the tail).
+- The EQ and reverb also need to run in the Phase 5 export render; they are written as plain classes so the offline mix can reuse them.
