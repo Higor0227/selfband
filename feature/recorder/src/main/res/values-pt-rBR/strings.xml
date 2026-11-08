@@ -164,4 +164,18 @@
     <string name="canvas_layout_hint">As trilhas ocupam os espaços em ordem. Auto se adapta ao número de trilhas e ao formato dos vídeos. Trocar o formato mantém o enquadramento de cada vídeo.</string>
     <string name="layout_free">Layout livre (editado à mão). Escolher um template o substitui.</string>
     <string name="edit_layout">Editar layout</string>
+    <!-- Mixer (phase 4a) -->
+    <string name="panel_mixer">Mixer</string>
+    <string name="mixer">Mixer</string>
+    <string name="mixer_reset">Zerar</string>
+    <string name="mixer_mute_short">M</string>
+    <string name="mixer_solo_short">S</string>
+    <string name="mixer_silenced_by_solo">Em silêncio: outra faixa está em solo</string>
+    <string name="mixer_volume">Vol</string>
+    <string name="mixer_pan">Pan</string>
+    <string name="mixer_master">Master</string>
+    <string name="mixer_limiter">Proteção contra clipping</string>
+    <string name="mixer_limiter_hint">Mantém os picos abaixo de −1 dBFS</string>
+    <string name="mixer_limiter_off">Desligada: mixagens altas podem distorcer</string>
+    <string name="mixer_limiting">Reduzindo %1$s dB</string>
 </resources>

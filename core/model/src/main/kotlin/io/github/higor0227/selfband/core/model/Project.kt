@@ -26,6 +26,7 @@ data class Project(
     val metronome: MetronomeSettings = MetronomeSettings(),
     val camera: CameraSettings = CameraSettings(),
     val canvas: CanvasSettings = CanvasSettings(),
+    val mixer: MixerSettings = MixerSettings(),
     val tracks: List<Track> = emptyList(),
 ) {
     /** Project length = end of the longest active take, in frames. */
@@ -46,13 +47,13 @@ data class Track(
     val muted: Boolean = false,
     /** Track volume in dB (fader). [Levels.MIN_DB] or below means silence. */
     val volumeDb: Double = 0.0,
+    /** −1 = left … 0 = center … +1 = right (see [Mixing.pan]). */
+    val pan: Float = 0f,
+    /** While any track is soloed, only soloed tracks are heard (mute still wins). */
+    val solo: Boolean = false,
 ) {
     val activeTake: Take?
         get() = takes.firstOrNull { it.id == activeTakeId } ?: takes.lastOrNull()
-
-    /** Linear playback gain: 0 when muted. */
-    val playbackGain: Float
-        get() = if (muted) 0f else Levels.dbToLinear(volumeDb).toFloat()
 }
 
 /**

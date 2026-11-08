@@ -163,4 +163,18 @@
     <string name="canvas_layout_hint">Tracks fill the spaces in order. Auto adapts to the number of tracks and to the shape of the videos. Switching formats keeps the framing of each video.</string>
     <string name="layout_free">Free layout (edited by hand). Picking a template replaces it.</string>
     <string name="edit_layout">Edit layout</string>
+    <!-- Mixer (phase 4a) -->
+    <string name="panel_mixer">Mixer</string>
+    <string name="mixer">Mixer</string>
+    <string name="mixer_reset">Reset</string>
+    <string name="mixer_mute_short">M</string>
+    <string name="mixer_solo_short">S</string>
+    <string name="mixer_silenced_by_solo">Silent: another track is soloed</string>
+    <string name="mixer_volume">Vol</string>
+    <string name="mixer_pan">Pan</string>
+    <string name="mixer_master">Master</string>
+    <string name="mixer_limiter">Clipping protection</string>
+    <string name="mixer_limiter_hint">Keeps peaks below −1 dBFS</string>
+    <string name="mixer_limiter_off">Off: loud mixes may clip</string>
+    <string name="mixer_limiting">Reducing %1$s dB</string>
 </resources>

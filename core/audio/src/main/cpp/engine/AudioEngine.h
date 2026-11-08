@@ -11,6 +11,7 @@
 
 #include <oboe/Oboe.h>
 
+#include "engine/Limiter.h"
 #include "engine/SpscRing.h"
 #include "engine/WavFile.h"
 
@@ -52,6 +53,10 @@ enum EngineStat : int32_t {
     kEsOutClockValid,      // 1 = from timestamps, 2 = estimated, 0 = none
     kEsOutputStart,        // output frame that played the transport's first frame
     kEsStartPosition,      // project frame the transport started from
+    // Master bus (SPEC 2.5).
+    kEsMasterPeakL,        // post-limiter output peak, held with decay
+    kEsMasterPeakR,
+    kEsLimiterGain,        // smallest limiter gain recently (1 = not limiting), held
     kEsCount
 };
 
@@ -82,7 +87,8 @@ enum RecordChannelMode : int32_t { kRecFirst = 0, kRecSecond = 1, kRecStereo = 2
 struct TrackConfig {
     std::string path;
     int64_t startFrame = 0; // project frame of the take's first sample
-    float gain = 1.0f;
+    float gainL = 1.0f;     // volume, pan, mute and solo already folded in
+    float gainR = 1.0f;
 };
 
 /**
@@ -114,8 +120,11 @@ public:
 
     /** Replaces the playback tracks. Only while the transport is idle. */
     bool setTracks(const std::vector<TrackConfig> &tracks);
-    /** Smoothly changes a track's gain (0 = muted). Any time. */
-    void setTrackGain(int32_t index, float gain);
+    /** Smoothly changes a track's left/right gains on the master bus (0 = silent). Any time. */
+    void setTrackGain(int32_t index, float gainL, float gainR);
+
+    /** Master volume (ramped) and clipping protection on/off. Any time. */
+    void setMaster(float gain, bool limiter);
 
     /** Starts playback (and recording if recordPath is non-empty) from fromFrame. */
     bool startTransport(int64_t fromFrame, const std::string &recordPath, int32_t channelMode);
@@ -163,8 +172,10 @@ private:
         SpscRing ring;          // interleaved stereo, aligned to the project timeline
         int64_t startFrame = 0;
         int64_t producedPos = 0; // next project frame the reader will produce
-        std::atomic<float> targetGain{1.0f};
-        float currentGain = 1.0f; // audio thread only
+        std::atomic<float> targetL{1.0f};
+        std::atomic<float> targetR{1.0f};
+        float currentL = 1.0f; // audio thread only
+        float currentR = 1.0f; // audio thread only
         std::atomic<float> peak{0.0f};
     };
 
@@ -218,6 +229,7 @@ private:
     int32_t mInScratchFrames = 0;
     std::unique_ptr<float[]> mRecScratch;
     std::unique_ptr<float[]> mTrackScratch;
+    std::unique_ptr<float[]> mMasterScratch; // stereo, mTrackScratchFrames
     std::unique_ptr<float[]> mMonitorScratch;
     int32_t mMonitorScratchFrames = 0;
     int32_t mTrackScratchFrames = 0;
@@ -252,6 +264,15 @@ private:
     // Track streaming.
     std::thread mReaderThread;
     std::atomic<bool> mReaderRun{false};
+
+    // Master bus.
+    std::atomic<float> mMasterGainTarget{1.0f};
+    float mMasterGain = 1.0f;            // audio thread only
+    std::atomic<bool> mLimiterEnabled{true};
+    Limiter mLimiter;                    // audio thread only (prepared in open)
+    std::atomic<float> mMasterPeakL{0.0f};
+    std::atomic<float> mMasterPeakR{0.0f};
+    std::atomic<float> mLimiterGain{1.0f};
 
     // Metering / health.
     std::atomic<float> mPeakL{0.0f};

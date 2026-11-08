@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 3 — Canvas and preview (complete; Phase 4 next)
+## Current phase: Phase 4 — Basic mixing (4a done; 4b next)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -452,3 +452,20 @@ Split into milestones (owner's choice): **1a** engine + recording + playback + m
 - The blur strength and darkening are fixed (no slider). Tell me if you want them adjustable.
 - With the image chosen, the Google Photos picker on this phone asks to confirm with "Concluir" even for a single photo. That is the system picker's behavior.
 - After 3d, Phase 3 is complete (once you confirm).
+
+## Phase 4 — Basic mixing
+
+### 4a — Volume, pan, mute/solo, meters, master + limiter (confirmed by the owner on 2026-11-08)
+- Recorder panel has a third chip, **Mixer**. The panel above shows the canvas and the playhead, like Canvas mode. The card below becomes the mixer.
+- Per track: M (mute) and S (solo) chips, a level meter, volume (−60..+24 dB) and pan. Tap a value to reset it (0 dB / center). Pan snaps to the center near it.
+- Master: L/R meters after the limiter, volume (−60..+12 dB), clipping protection switch with the live gain reduction. "Zerar" resets the whole mix.
+- Rules (in `core:model` `Mixing`, unit tested):
+  - pan uses a balance law: center = unity, the sides only attenuate;
+  - mute wins over solo; while any track is soloed only soloed tracks play.
+- Engine: tracks mix into a stereo master bus with per-channel gain ramps (no zipper clicks).
+  - Master gain is ramped, then the limiter, then the meters.
+  - The limiter is stereo-linked, ceiling −1 dBFS, instant attack, 80 ms release, no lookahead. It adds no delay, so timing and calibration stay valid.
+  - The old soft clip is gone; a final ±1 clamp runs after the metronome.
+- Model: `Track.pan`, `Track.solo`, `Project.mixer` (`MixerSettings`: master volume, limiter on). Older projects read as centered, not soloed, limiter on. 4 new tests, 60 unit tests in total.
+- Meters show silence while stopped (the engine holds the last peak when idle).
+- On the phone: the Mixer chip, the card, M/S/volume/pan rows and the master row appeared in a test project with 2 audio tracks; no errors in logcat. The test project was deleted. The owner tried it and confirmed it works.

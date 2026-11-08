@@ -101,10 +101,12 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream *stream, vo
     }
     if (mCurrent == kIdle) return oboe::DataCallbackResult::Continue;
 
-    // 3) Mix the tracks (rings are already aligned to the project timeline).
+    // 3) Mix the tracks into the master bus (rings are already aligned to the project timeline).
     const int32_t trackCount = mTrackCount.load(std::memory_order_acquire);
     const int32_t frames = std::min(numFrames, mTrackScratchFrames);
     float *scratch = mTrackScratch.get();
+    float *master = mMasterScratch.get();
+    std::memset(master, 0, static_cast<size_t>(frames) * 2 * sizeof(float));
     for (int32_t t = 0; t < trackCount; ++t) {
         TrackStream &track = *mTracks[t];
         const size_t want = static_cast<size_t>(frames) * 2;
@@ -113,20 +115,56 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream *stream, vo
             std::memset(scratch + got, 0, (want - got) * sizeof(float));
             mUnderruns.fetch_add(1, std::memory_order_relaxed);
         }
-        const float g0 = track.currentGain;
-        const float g1 = track.targetGain.load(std::memory_order_relaxed);
+        const float l0 = track.currentL;
+        const float r0 = track.currentR;
+        const float l1 = track.targetL.load(std::memory_order_relaxed);
+        const float r1 = track.targetR.load(std::memory_order_relaxed);
         const float heldPeak = track.peak.load(std::memory_order_relaxed) * kPeakDecay;
-        if (g0 == 0.0f && g1 == 0.0f) {
+        if (l0 == 0.0f && r0 == 0.0f && l1 == 0.0f && r1 == 0.0f) {
             track.peak.store(heldPeak, std::memory_order_relaxed);
             continue;
         }
-        const float step = (g1 - g0) / static_cast<float>(frames);
+        const float stepL = (l1 - l0) / static_cast<float>(frames);
+        const float stepR = (r1 - r0) / static_cast<float>(frames);
         float peak = 0.0f;
         for (int32_t f = 0; f < frames; ++f) {
-            const float g = g0 + step * static_cast<float>(f + 1); // ramp: no zipper clicks
-            const float l = scratch[2 * f] * g;
-            const float r = scratch[2 * f + 1] * g;
+            const float k = static_cast<float>(f + 1); // ramp: no zipper clicks
+            const float l = scratch[2 * f] * (l0 + stepL * k);
+            const float r = scratch[2 * f + 1] * (r0 + stepR * k);
             peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
+            master[2 * f] += l;
+            master[2 * f + 1] += r;
+        }
+        track.currentL = l1;
+        track.currentR = r1;
+        track.peak.store(std::max(peak, heldPeak), std::memory_order_relaxed);
+    }
+
+    // Master: volume (ramped), clipping protection, meters, then out to the device.
+    {
+        const float g0 = mMasterGain;
+        const float g1 = mMasterGainTarget.load(std::memory_order_relaxed);
+        if (g0 != 1.0f || g1 != 1.0f) {
+            const float step = (g1 - g0) / static_cast<float>(frames);
+            for (int32_t f = 0; f < frames; ++f) {
+                const float g = g0 + step * static_cast<float>(f + 1);
+                master[2 * f] *= g;
+                master[2 * f + 1] *= g;
+            }
+        }
+        mMasterGain = g1;
+        float minGain = 1.0f;
+        if (mLimiterEnabled.load(std::memory_order_relaxed)) {
+            minGain = mLimiter.process(master, frames);
+        } else {
+            mLimiter.reset();
+        }
+        float maxL = 0.0f, maxR = 0.0f;
+        for (int32_t f = 0; f < frames; ++f) {
+            const float l = master[2 * f];
+            const float r = master[2 * f + 1];
+            maxL = std::max(maxL, std::fabs(l));
+            maxR = std::max(maxR, std::fabs(r));
             if (outChannels >= 2) {
                 out[f * outChannels] += l;
                 out[f * outChannels + 1] += r;
@@ -134,21 +172,21 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream *stream, vo
                 out[f] += 0.5f * (l + r);
             }
         }
-        track.currentGain = g1;
-        track.peak.store(std::max(peak, heldPeak), std::memory_order_relaxed);
-    }
-
-    // Temporary master protection until the Phase 4 limiter: transparent below 0.9,
-    // soft saturation above, so boosted tracks never hard-clip.
-    for (int32_t i = 0, n = numFrames * outChannels; i < n; ++i) {
-        const float x = out[i];
-        const float a = std::fabs(x);
-        if (a > 0.9f) out[i] = std::copysign(0.9f + 0.1f * std::tanh((a - 0.9f) * 10.0f), x);
+        mMasterPeakL.store(std::max(maxL, mMasterPeakL.load(std::memory_order_relaxed) * kPeakDecay),
+                           std::memory_order_relaxed);
+        mMasterPeakR.store(std::max(maxR, mMasterPeakR.load(std::memory_order_relaxed) * kPeakDecay),
+                           std::memory_order_relaxed);
+        // Gain reduction display: drops at once, recovers like a peak meter.
+        const float heldGain = 1.0f - (1.0f - mLimiterGain.load(std::memory_order_relaxed)) * kPeakDecay;
+        mLimiterGain.store(std::min(minGain, heldGain), std::memory_order_relaxed);
     }
 
     // The click goes to the headphones only: it is mixed after the tracks and never reaches
     // the recording (which comes from the input) or the export.
     mixMetronome(out, numFrames, outChannels, mPosition);
+
+    // Never hand the device values past full scale (monitoring + playback + click can add up).
+    for (int32_t i = 0, n = numFrames * outChannels; i < n; ++i) out[i] = std::clamp(out[i], -1.0f, 1.0f);
 
     mPosition += numFrames;
     mPositionPublic.store(mPosition, std::memory_order_relaxed);
@@ -350,6 +388,9 @@ oboe::Result AudioEngine::open(const StreamConfig &config) {
     mRecScratch.reset(new float[static_cast<size_t>(mInScratchFrames) * 2]);
     mTrackScratchFrames = std::max(mOutput->getBufferCapacityInFrames(), kInputScratchFrames);
     mTrackScratch.reset(new float[static_cast<size_t>(mTrackScratchFrames) * 2]);
+    mMasterScratch.reset(new float[static_cast<size_t>(mTrackScratchFrames) * 2]);
+    mLimiter.prepare(mSampleRate);
+    mMasterGain = mMasterGainTarget.load();
     mRecRing.allocate(static_cast<size_t>(kRecordRingSeconds * mSampleRate * 2));
     mMonitorScratchFrames = kInputScratchFrames;
     mMonitorScratch.reset(new float[static_cast<size_t>(mMonitorScratchFrames) * 2]);
@@ -503,19 +544,27 @@ bool AudioEngine::setTracks(const std::vector<TrackConfig> &tracks) {
         if (!track->reader.open(cfg.path)) continue; // logged by the reader
         track->ring.allocate(ringSamples);
         track->startFrame = cfg.startFrame;
-        track->targetGain.store(cfg.gain);
-        track->currentGain = cfg.gain;
+        track->targetL.store(cfg.gainL);
+        track->targetR.store(cfg.gainR);
+        track->currentL = cfg.gainL;
+        track->currentR = cfg.gainR;
         mTracks.push_back(std::move(track));
     }
     SB_LOGI("Engine: %zu track(s) loaded", mTracks.size());
     return mTracks.size() == tracks.size();
 }
 
-void AudioEngine::setTrackGain(int32_t index, float gain) {
+void AudioEngine::setTrackGain(int32_t index, float gainL, float gainR) {
     std::lock_guard<std::mutex> lock(mControlLock);
     if (index >= 0 && index < static_cast<int32_t>(mTracks.size())) {
-        mTracks[index]->targetGain.store(gain, std::memory_order_relaxed);
+        mTracks[index]->targetL.store(std::max(0.0f, gainL), std::memory_order_relaxed);
+        mTracks[index]->targetR.store(std::max(0.0f, gainR), std::memory_order_relaxed);
     }
+}
+
+void AudioEngine::setMaster(float gain, bool limiter) {
+    mMasterGainTarget.store(std::max(0.0f, gain), std::memory_order_relaxed);
+    mLimiterEnabled.store(limiter, std::memory_order_relaxed);
 }
 
 bool AudioEngine::produce(TrackStream &track, int32_t frames) {
@@ -598,7 +647,8 @@ bool AudioEngine::startTransport(int64_t fromFrame, const std::string &recordPat
     for (auto &track : mTracks) {
         track->ring.reset();
         track->producedPos = fromFrame;
-        track->currentGain = track->targetGain.load();
+        track->currentL = track->targetL.load();
+        track->currentR = track->targetR.load();
         while (track->ring.availableToWrite() >= static_cast<size_t>(kReaderChunkFrames) * 2) {
             produce(*track, kReaderChunkFrames);
         }
@@ -809,6 +859,9 @@ void AudioEngine::fillStatus(double *o, int32_t capacity) {
     }
     o[kEsOutputStart] = static_cast<double>(mRecOutStart.load());
     o[kEsStartPosition] = static_cast<double>(mStartPosition.load());
+    o[kEsMasterPeakL] = mMasterPeakL.load();
+    o[kEsMasterPeakR] = mMasterPeakR.load();
+    o[kEsLimiterGain] = mLimiterGain.load();
 }
 
 } // namespace selfband

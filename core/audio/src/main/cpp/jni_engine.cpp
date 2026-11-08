@@ -53,6 +53,7 @@ ENGINE_FN(void, nativeClose)(JNIEnv *, jclass, jlong handle) { asEngine(handle)-
 
 ENGINE_FN(jboolean, nativeSetTracks)(JNIEnv *env, jclass, jlong handle, jobjectArray paths,
                                      jlongArray startFrames, jfloatArray gains) {
+    // gains: left/right pairs, two per track.
     const jsize count = env->GetArrayLength(paths);
     std::vector<selfband::TrackConfig> tracks(static_cast<size_t>(count));
     jlong *starts = env->GetLongArrayElements(startFrames, nullptr);
@@ -62,15 +63,21 @@ ENGINE_FN(jboolean, nativeSetTracks)(JNIEnv *env, jclass, jlong handle, jobjectA
         tracks[i].path = toStdString(env, path);
         env->DeleteLocalRef(path);
         tracks[i].startFrame = starts[i];
-        tracks[i].gain = g[i];
+        tracks[i].gainL = g[2 * i];
+        tracks[i].gainR = g[2 * i + 1];
     }
     env->ReleaseLongArrayElements(startFrames, starts, JNI_ABORT);
     env->ReleaseFloatArrayElements(gains, g, JNI_ABORT);
     return asEngine(handle)->setTracks(tracks) ? JNI_TRUE : JNI_FALSE;
 }
 
-ENGINE_FN(void, nativeSetTrackGain)(JNIEnv *, jclass, jlong handle, jint index, jfloat gain) {
-    asEngine(handle)->setTrackGain(index, gain);
+ENGINE_FN(void, nativeSetTrackGain)(JNIEnv *, jclass, jlong handle, jint index, jfloat gainL,
+                                   jfloat gainR) {
+    asEngine(handle)->setTrackGain(index, gainL, gainR);
+}
+
+ENGINE_FN(void, nativeSetMaster)(JNIEnv *, jclass, jlong handle, jfloat gain, jboolean limiter) {
+    asEngine(handle)->setMaster(gain, limiter == JNI_TRUE);
 }
 
 ENGINE_FN(jboolean, nativeStartTransport)(JNIEnv *env, jclass, jlong handle, jlong fromFrame,

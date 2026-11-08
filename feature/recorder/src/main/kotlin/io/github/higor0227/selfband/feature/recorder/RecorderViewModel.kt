@@ -42,6 +42,8 @@ import io.github.higor0227.selfband.core.model.LeakTestResult
 import io.github.higor0227.selfband.core.model.LOG_TAG
 import io.github.higor0227.selfband.core.model.Levels
 import io.github.higor0227.selfband.core.model.MetronomeSettings
+import io.github.higor0227.selfband.core.model.MixerSettings
+import io.github.higor0227.selfband.core.model.Mixing
 import io.github.higor0227.selfband.core.model.Project
 import io.github.higor0227.selfband.core.model.Take
 import io.github.higor0227.selfband.core.model.TakeVideo
@@ -149,7 +151,7 @@ data class SyncCheckUi(
 )
 
 /** What the panel above the tracks shows. */
-enum class PanelMode { CAMERA, CANVAS }
+enum class PanelMode { CAMERA, CANVAS, MIXER }
 
 data class RecorderUiState(
     val project: Project? = null,
@@ -655,40 +657,63 @@ class RecorderViewModel @Inject constructor(
         }
     }
 
-    fun toggleMute(trackId: String) {
-        viewModelScope.launch {
-            val updated = repository.update(projectId) { p ->
-                p.copy(tracks = p.tracks.map { if (it.id == trackId) it.copy(muted = !it.muted) else it })
-            }
-            val index = engineTrackIds.indexOf(trackId)
-            val muted = updated.tracks.firstOrNull { it.id == trackId }?.muted ?: return@launch
-            val track = updated.tracks.firstOrNull { it.id == trackId } ?: return@launch
-            if (index >= 0) engine.setTrackGain(index, track.playbackGain)
-        }
-    }
+    // --- mixer (SPEC 2.5): every change is heard at once; releasing a control saves it ---
 
-    /** Live fader move: changes the engine gain only (no disk write). */
-    fun previewTrackVolume(trackId: String, db: Double) {
-        val index = engineTrackIds.indexOf(trackId)
-        val muted = uiState.value.project?.tracks?.firstOrNull { it.id == trackId }?.muted ?: return
-        if (index < 0) return
-        viewModelScope.launch {
-            engine.setTrackGain(index, if (muted) 0f else Levels.dbToLinear(db).toFloat())
-        }
-    }
+    fun toggleMute(trackId: String) = saveMix { p -> p.updateTrack(trackId) { it.copy(muted = !it.muted) } }
+
+    fun toggleSolo(trackId: String) = saveMix { p -> p.updateTrack(trackId) { it.copy(solo = !it.solo) } }
+
+    /** Live fader move: changes the engine gains only (no disk write). */
+    fun previewTrackVolume(trackId: String, db: Double) =
+        previewMix { p -> p.updateTrack(trackId) { it.copy(volumeDb = db) } }
 
     /** Fader released: persists the volume. */
-    fun setTrackVolume(trackId: String, db: Double) {
-        viewModelScope.launch {
-            val updated = repository.update(projectId) { p ->
-                p.copy(tracks = p.tracks.map {
-                    if (it.id == trackId) it.copy(volumeDb = db.coerceIn(Levels.MIN_DB, Levels.MAX_DB)) else it
-                })
-            }
-            val index = engineTrackIds.indexOf(trackId)
-            val track = updated.tracks.firstOrNull { it.id == trackId } ?: return@launch
-            if (index >= 0) engine.setTrackGain(index, track.playbackGain)
+    fun setTrackVolume(trackId: String, db: Double) =
+        saveMix { p -> p.updateTrack(trackId) { it.copy(volumeDb = db.coerceIn(Levels.MIN_DB, Levels.MAX_DB)) } }
+
+    fun previewTrackPan(trackId: String, pan: Float) =
+        previewMix { p -> p.updateTrack(trackId) { it.copy(pan = pan) } }
+
+    fun setTrackPan(trackId: String, pan: Float) =
+        saveMix { p -> p.updateTrack(trackId) { it.copy(pan = pan.coerceIn(-1f, 1f)) } }
+
+    fun previewMasterVolume(db: Double) = previewMix { p -> p.copy(mixer = p.mixer.copy(masterVolumeDb = db)) }
+
+    fun setMasterVolume(db: Double) = saveMix { p ->
+        p.copy(mixer = p.mixer.copy(masterVolumeDb = db.coerceIn(Mixing.MIN_MASTER_DB, Mixing.MAX_MASTER_DB)))
+    }
+
+    fun setLimiter(on: Boolean) = saveMix { p -> p.copy(mixer = p.mixer.copy(limiter = on)) }
+
+    /** Resets every track's volume, pan, mute and solo, and the master (limiter back on). */
+    fun resetMix() = saveMix { p ->
+        p.copy(
+            mixer = MixerSettings(),
+            tracks = p.tracks.map { it.copy(volumeDb = 0.0, pan = 0f, muted = false, solo = false) },
+        )
+    }
+
+    private fun Project.updateTrack(trackId: String, transform: (Track) -> Track): Project =
+        copy(tracks = tracks.map { if (it.id == trackId) transform(it) else it })
+
+    private fun previewMix(transform: (Project) -> Project) {
+        val project = uiState.value.project ?: return
+        viewModelScope.launch { applyMix(transform(project)) }
+    }
+
+    private fun saveMix(transform: (Project) -> Project) {
+        viewModelScope.launch { applyMix(repository.update(projectId, transform)) }
+    }
+
+    /** Pushes every track's gains (solo affects all of them) and the master to the engine. */
+    private suspend fun applyMix(project: Project) {
+        val anySolo = Mixing.anySolo(project)
+        val byId = project.tracks.associateBy { it.id }
+        engineTrackIds.forEachIndexed { index, id ->
+            val track = byId[id] ?: return@forEachIndexed
+            engine.setTrackGain(index, Mixing.trackGain(track, anySolo))
         }
+        engine.setMaster(Mixing.masterGain(project.mixer), project.mixer.limiter)
     }
 
     /** Manual nudge on top of the automatic alignment (SPEC 2.2). Only while idle. */
@@ -1001,16 +1026,18 @@ class RecorderViewModel @Inject constructor(
     private suspend fun loadTracks(project: Project) {
         val playable = project.tracks.filter { (it.activeTake?.lengthFrames ?: 0) > 0 }
         engineTrackIds = playable.map { it.id }
+        val anySolo = Mixing.anySolo(project)
         engine.setTracks(
             playable.map { track ->
                 val take = track.activeTake!!
                 PlaybackTrack(
                     file = repository.takeAudioFile(project.id, track.id, take.audioFile),
                     startFrame = take.startFrame,
-                    gain = track.playbackGain,
+                    gain = Mixing.trackGain(track, anySolo),
                 )
             },
         )
+        engine.setMaster(Mixing.masterGain(project.mixer), project.mixer.limiter)
         local.update { it.copy(freeBytes = repository.freeBytes(), engineTrackIds = engineTrackIds) }
     }
 

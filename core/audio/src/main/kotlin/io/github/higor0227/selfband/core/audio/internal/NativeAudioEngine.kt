@@ -14,6 +14,7 @@ import io.github.higor0227.selfband.core.audio.RecordingResult
 import io.github.higor0227.selfband.core.audio.TransportState
 import io.github.higor0227.selfband.core.model.LOG_TAG
 import io.github.higor0227.selfband.core.model.MetronomeSettings
+import io.github.higor0227.selfband.core.model.StereoGain
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -98,12 +99,16 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
             handle,
             tracks.map { it.file.absolutePath }.toTypedArray(),
             tracks.map { it.startFrame }.toLongArray(),
-            tracks.map { it.gain }.toFloatArray(),
+            tracks.flatMap { listOf(it.gain.left, it.gain.right) }.toFloatArray(),
         )
     }
 
-    override suspend fun setTrackGain(index: Int, gain: Float): Unit = withContext(control) {
-        nativeSetTrackGain(handle, index, gain)
+    override suspend fun setTrackGain(index: Int, gain: StereoGain): Unit = withContext(control) {
+        nativeSetTrackGain(handle, index, gain.left, gain.right)
+    }
+
+    override suspend fun setMaster(gain: Float, limiter: Boolean): Unit = withContext(control) {
+        nativeSetMaster(handle, gain, limiter)
     }
 
     override suspend fun play(fromFrame: Long): Boolean = withContext(control) {
@@ -194,6 +199,9 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
         } else {
             null
         },
+        masterPeakLeft = this[ST_MASTER_PEAK_L].toFloat(),
+        masterPeakRight = this[ST_MASTER_PEAK_R].toFloat(),
+        limiterGain = if (this[ST_OPEN] == 1.0) this[ST_LIMITER_GAIN].toFloat() else 1f,
     )
 
     private fun Double.toApi() = when (toInt()) {
@@ -239,7 +247,10 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
         const val ST_OUT_CLOCK_VALID = 28
         const val ST_OUTPUT_START = 29
         const val ST_START_POSITION = 30
-        const val ST_COUNT = 31
+        const val ST_MASTER_PEAK_L = 31
+        const val ST_MASTER_PEAK_R = 32
+        const val ST_LIMITER_GAIN = 33
+        const val ST_COUNT = 34
 
         const val REC_FRAMES = 0
         const val REC_CHANNELS = 1
@@ -271,7 +282,8 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
         @JvmStatic private external fun nativeSetTracks(
             handle: Long, paths: Array<String>, startFrames: LongArray, gains: FloatArray,
         ): Boolean
-        @JvmStatic private external fun nativeSetTrackGain(handle: Long, index: Int, gain: Float)
+        @JvmStatic private external fun nativeSetTrackGain(handle: Long, index: Int, gainL: Float, gainR: Float)
+        @JvmStatic private external fun nativeSetMaster(handle: Long, gain: Float, limiter: Boolean)
         @JvmStatic private external fun nativeStartTransport(
             handle: Long, fromFrame: Long, recordPath: String?, channelMode: Int,
         ): Boolean

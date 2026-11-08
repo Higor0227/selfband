@@ -3,6 +3,7 @@ package io.github.higor0227.selfband.core.audio
 
 import io.github.higor0227.selfband.core.model.AlignmentMath
 import io.github.higor0227.selfband.core.model.MetronomeSettings
+import io.github.higor0227.selfband.core.model.StereoGain
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
 
@@ -20,8 +21,14 @@ interface AudioEngine {
     /** Replaces the playback tracks. Only while idle. */
     suspend fun setTracks(tracks: List<PlaybackTrack>): Boolean
 
-    /** Smooth gain change for the track at [index] in the last [setTracks] list (0 = mute). */
-    suspend fun setTrackGain(index: Int, gain: Float)
+    /**
+     * Smooth gain change for the track at [index] in the last [setTracks] list: left/right
+     * linear gains on the master bus with volume, pan, mute and solo folded in (see Mixing).
+     */
+    suspend fun setTrackGain(index: Int, gain: StereoGain)
+
+    /** Master volume (linear, ramped) and clipping protection. Any time. */
+    suspend fun setMaster(gain: Float, limiter: Boolean)
 
     /**
      * Metronome clicks (headphones only). [countInFrames] > 0 also plays count-in clicks for
@@ -66,7 +73,7 @@ sealed interface EngineOpenResult {
     data class Failed(val reason: String) : EngineOpenResult
 }
 
-data class PlaybackTrack(val file: File, val startFrame: Long, val gain: Float)
+data class PlaybackTrack(val file: File, val startFrame: Long, val gain: StereoGain)
 
 /** Which input channels a take records. */
 enum class RecordChannelMode(val nativeValue: Int) { FIRST(0), SECOND(1), STEREO(2) }
@@ -103,6 +110,11 @@ data class EngineStatus(
     val outputBurstFrames: Int = 0,
     /** Post-gain output peak per track, in the order of the last setTracks() list. */
     val trackPeaks: List<Float> = emptyList(),
+    /** Master output peaks after the limiter (linear, held). */
+    val masterPeakLeft: Float = 0f,
+    val masterPeakRight: Float = 0f,
+    /** Smallest recent limiter gain: 1 = not limiting, 0.5 = −6 dB of reduction. */
+    val limiterGain: Float = 1f,
     /** Set while the transport runs and the output clock is known. */
     val presentationClock: PresentationClock? = null,
 )

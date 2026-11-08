@@ -54,7 +54,7 @@ import kotlin.math.min
 
 /**
  * Panel above the track list: the camera preview (with grid and ghost) and the main video
- * switches, or the live canvas (SPEC 2.6) with a playhead. The camera keeps running under the
+ * switches, or the live canvas (SPEC 2.6) with a playhead (also under the mixer). The camera keeps running under the
  * canvas so switching back is instant and the capture session is never rebuilt.
  */
 @Composable
@@ -99,7 +99,7 @@ fun CameraPanel(
                     onSurface = onPreviewSurface,
                 )
             }
-            if (state.panelMode == PanelMode.CANVAS) {
+            if (state.panelMode != PanelMode.CAMERA) {
                 Box(Modifier.matchParentSize().background(Color.Black), contentAlignment = Alignment.Center) {
                     val project = state.project
                     if (project != null && project.tracks.any { it.activeTake?.video != null }) {
@@ -131,8 +131,13 @@ fun CameraPanel(
                 onClick = { onPanelMode(PanelMode.CANVAS) },
                 label = { Text(stringResource(R.string.panel_canvas)) },
             )
+            FilterChip(
+                selected = state.panelMode == PanelMode.MIXER,
+                onClick = { onPanelMode(PanelMode.MIXER) },
+                label = { Text(stringResource(R.string.panel_mixer)) },
+            )
         }
-        if (state.panelMode == PanelMode.CANVAS) {
+        if (state.panelMode != PanelMode.CAMERA) {
             PlayheadRow(state, onPlayhead)
         } else Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp),

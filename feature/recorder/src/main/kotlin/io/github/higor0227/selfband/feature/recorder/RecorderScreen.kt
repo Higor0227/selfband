@@ -171,6 +171,18 @@ fun RecorderRoute(
             onTemplate = viewModel::setLayoutTemplate,
             onEditLayout = { onOpenLayout(viewModel.projectId) },
         ),
+        mixer = MixerActions(
+            onToggleMute = viewModel::toggleMute,
+            onToggleSolo = viewModel::toggleSolo,
+            onPreviewVolume = viewModel::previewTrackVolume,
+            onSetVolume = viewModel::setTrackVolume,
+            onPreviewPan = viewModel::previewTrackPan,
+            onSetPan = viewModel::setTrackPan,
+            onPreviewMaster = viewModel::previewMasterVolume,
+            onSetMaster = viewModel::setMasterVolume,
+            onLimiter = viewModel::setLimiter,
+            onReset = viewModel::resetMix,
+        ),
     )
 }
 
@@ -197,6 +209,7 @@ fun RecorderScreen(
     cameraSettings: CameraSettingsActions,
     takes: TakeActions,
     canvasActions: CanvasActions,
+    mixer: MixerActions,
 ) {
     // Ghost opacity follows the slider live; it is saved when the slider is released.
     val savedOpacity = state.cameraSettings.ghostOpacity
@@ -295,10 +308,10 @@ fun RecorderScreen(
                 }, onStop)
             }
             item {
-                if (state.panelMode == PanelMode.CANVAS) {
-                    CanvasLayoutCard(state, canvasActions)
-                } else {
-                    CameraSettingsCard(state, ghostOpacity, settingsActions)
+                when (state.panelMode) {
+                    PanelMode.CANVAS -> CanvasLayoutCard(state, canvasActions)
+                    PanelMode.MIXER -> MixerCard(state, mixer)
+                    PanelMode.CAMERA -> CameraSettingsCard(state, ghostOpacity, settingsActions)
                 }
             }
             state.project?.let { project ->
@@ -318,7 +331,7 @@ fun RecorderScreen(
                     isRecording = state.recordingTrackId == track.id,
                     canEdit = state.isIdle,
                     canRecord = state.isIdle && state.status.isOpen,
-                    peak = state.trackPeak(track.id),
+                    peak = if (state.isIdle) 0f else state.trackPeak(track.id),
                     onToggleMute = { onToggleMute(track.id) },
                     onPreviewVolume = { onPreviewVolume(track.id, it) },
                     onSetVolume = { onSetVolume(track.id, it) },
