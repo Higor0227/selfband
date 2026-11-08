@@ -1,6 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <resources>
+    <string name="settings_title">Configurações</string>
+    <string name="settings_proxies">Proxies na prévia</string>
+    <string name="settings_proxies_hint">Cópias leves (540p) dos vídeos, geradas em segundo plano depois de gravar, para a prévia continuar fluida com muitas trilhas. A exportação sempre usa os originais.</string>
+    <string name="settings_proxies_auto">Automático</string>
+    <string name="settings_proxies_auto_hint">A partir de %1$d vídeos, ou quando o aparelho não consegue decodificar os originais a tempo</string>
+    <string name="settings_proxies_always">Sempre</string>
+    <string name="settings_proxies_off">Nunca</string>
+    <plurals name="settings_proxies_pending">
+        <item quantity="one">Gerando %1$d proxy…</item>
+        <item quantity="many">Gerando %1$d proxies…</item>
+        <item quantity="other">Gerando %1$d proxies…</item>
+    </plurals>
+
     <string name="diagnostics_title">Diagnóstico de áudio</string>
     <string name="back">Voltar</string>
     <string name="yes">Sim</string>

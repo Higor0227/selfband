@@ -4,6 +4,7 @@ package io.github.higor0227.selfband.core.video
 import android.view.Surface
 import io.github.higor0227.selfband.core.model.AspectRatio
 import io.github.higor0227.selfband.core.model.Layer
+import io.github.higor0227.selfband.core.model.ProxyMode
 import java.io.File
 
 /** One layer to draw: its video file, where it sits on the timeline and its placement. */
@@ -18,6 +19,8 @@ data class SceneLayer(
     /** Project position (frames) of the first video frame. */
     val startFrame: Double,
     val layer: Layer,
+    /** Light copy of [file] for the preview (SPEC 3.5), when it has been made; same timing. */
+    val proxy: File? = null,
 )
 
 /**
@@ -42,6 +45,12 @@ data class CanvasScene(
             blur?.let { byFile.putIfAbsent(it.file.absolutePath, it) }
             return byFile.values.toList()
         }
+
+    /** The same scene decoding each video's proxy where there is one. */
+    fun withProxies(): CanvasScene {
+        fun SceneLayer.light() = proxy?.let { copy(file = it, proxy = null) } ?: this
+        return copy(layers = layers.map { it.light() }, blur = blur?.light())
+    }
 }
 
 /** Project position (frames) shown at CLOCK_MONOTONIC time `timeNanos`. */
@@ -67,6 +76,13 @@ interface CanvasPreview {
     fun setScene(scene: CanvasScene)
 
     fun setPosition(source: PositionSource)
+
+    /**
+     * When to decode the layers' proxies instead of the originals (SPEC 3.5). In
+     * [ProxyMode.AUTO] this also happens when the originals need more decoders than the device
+     * has, or when the preview measures that it cannot decode them in time.
+     */
+    fun setProxyMode(mode: ProxyMode)
 
     /** While paused nothing is drawn and the decoders are released (screen not visible). */
     fun setPaused(paused: Boolean)

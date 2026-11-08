@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <resources>
+    <string name="settings_title">Settings</string>
+    <string name="settings_proxies">Preview proxies</string>
+    <string name="settings_proxies_hint">Light copies (540p) of the videos, made in the background after recording, so the preview stays smooth with many tracks. The export always uses the originals.</string>
+    <string name="settings_proxies_auto">Automatic</string>
+    <string name="settings_proxies_auto_hint">From %1$d videos, or when this device cannot decode the originals in time</string>
+    <string name="settings_proxies_always">Always</string>
+    <string name="settings_proxies_off">Never</string>
+    <plurals name="settings_proxies_pending">
+        <item quantity="one">Making %1$d proxy…</item>
+        <item quantity="other">Making %1$d proxies…</item>
+    </plurals>
+
     <string name="diagnostics_title">Audio diagnostics</string>
     <string name="back">Back</string>
     <string name="yes">Yes</string>

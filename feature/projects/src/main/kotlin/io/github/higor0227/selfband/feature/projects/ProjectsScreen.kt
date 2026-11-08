@@ -48,14 +48,14 @@ import java.util.Date
 @Composable
 fun ProjectsRoute(
     onOpenProject: (String) -> Unit,
-    onOpenDiagnostics: () -> Unit,
+    onOpenSettings: () -> Unit,
     viewModel: ProjectsViewModel = hiltViewModel(),
 ) {
     val projects by viewModel.projects.collectAsStateWithLifecycle()
     ProjectsScreen(
         projects = projects,
         onOpenProject = onOpenProject,
-        onOpenDiagnostics = onOpenDiagnostics,
+        onOpenSettings = onOpenSettings,
         onCreate = { name -> viewModel.create(name, onOpenProject) },
         onDelete = viewModel::delete,
     )
@@ -66,7 +66,7 @@ fun ProjectsRoute(
 fun ProjectsScreen(
     projects: List<Project>,
     onOpenProject: (String) -> Unit,
-    onOpenDiagnostics: () -> Unit,
+    onOpenSettings: () -> Unit,
     onCreate: (String) -> Unit,
     onDelete: (String) -> Unit,
 ) {
@@ -78,8 +78,8 @@ fun ProjectsScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.projects_title)) },
                 actions = {
-                    IconButton(onClick = onOpenDiagnostics) {
-                        Icon(Icons.Filled.Settings, stringResource(R.string.open_diagnostics))
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, stringResource(R.string.open_settings))
                     }
                 },
             )

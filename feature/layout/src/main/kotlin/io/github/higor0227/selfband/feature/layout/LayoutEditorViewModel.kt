@@ -18,10 +18,12 @@ import io.github.higor0227.selfband.core.model.NormRect
 import io.github.higor0227.selfband.core.model.Project
 import io.github.higor0227.selfband.core.model.displayAspect
 import io.github.higor0227.selfband.core.model.value
+import io.github.higor0227.selfband.core.project.AppSettingsRepository
 import io.github.higor0227.selfband.core.project.ProjectRepository
 import io.github.higor0227.selfband.core.video.CanvasPreview
 import io.github.higor0227.selfband.core.video.CanvasPreviewFactory
 import io.github.higor0227.selfband.core.video.CanvasScenes
+import io.github.higor0227.selfband.core.video.ProxyGenerator
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -90,6 +93,8 @@ class LayoutEditorViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: ProjectRepository,
     canvasFactory: CanvasPreviewFactory,
+    proxies: ProxyGenerator,
+    settings: AppSettingsRepository,
 ) : ViewModel() {
 
     private val projectId: String = checkNotNull(savedStateHandle[ARG_PROJECT_ID])
@@ -124,14 +129,21 @@ class LayoutEditorViewModel @Inject constructor(
     init {
         canvasPreview.setPosition { playhead.toDouble() }
         viewModelScope.launch {
-            combine(repository.observe(projectId).filterNotNull(), local.map { it.draft }.distinctUntilChanged()) { p, draft ->
+            combine(
+                repository.observe(projectId).filterNotNull(),
+                local.map { it.draft }.distinctUntilChanged(),
+                proxies.state.map { it.finished }.distinctUntilChanged(),
+            ) { p, draft, _ ->
                 CanvasScenes.build(
                     p,
                     { trackId, name -> repository.takeAudioFile(p.id, trackId, name) },
                     { name -> repository.projectMediaFile(p.id, name) },
                     draft ?: p.canvas,
                 )
-            }.distinctUntilChanged().collect { canvasPreview.setScene(it) }
+            }.flowOn(Dispatchers.IO).distinctUntilChanged().collect { canvasPreview.setScene(it) }
+        }
+        viewModelScope.launch {
+            settings.settings.map { it.proxyMode }.distinctUntilChanged().collect { canvasPreview.setProxyMode(it) }
         }
     }
 

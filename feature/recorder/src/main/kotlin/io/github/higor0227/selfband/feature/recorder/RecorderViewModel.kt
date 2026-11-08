@@ -46,6 +46,7 @@ import io.github.higor0227.selfband.core.model.MetronomeSettings
 import io.github.higor0227.selfband.core.model.MixerSettings
 import io.github.higor0227.selfband.core.model.Mixing
 import io.github.higor0227.selfband.core.model.Project
+import io.github.higor0227.selfband.core.model.Proxies
 import io.github.higor0227.selfband.core.model.ReverbSettings
 import io.github.higor0227.selfband.core.model.Take
 import io.github.higor0227.selfband.core.model.TakeVideo
@@ -59,12 +60,14 @@ import io.github.higor0227.selfband.core.camera.CameraState
 import io.github.higor0227.selfband.core.camera.VideoConfig
 import io.github.higor0227.selfband.core.camera.VideoCamera
 import io.github.higor0227.selfband.core.camera.VideoRecording
+import io.github.higor0227.selfband.core.project.AppSettingsRepository
 import io.github.higor0227.selfband.core.project.DeviceProfileRepository
 import io.github.higor0227.selfband.core.project.ProjectRepository
 import io.github.higor0227.selfband.core.video.CanvasPreview
 import io.github.higor0227.selfband.core.video.CanvasPreviewFactory
 import io.github.higor0227.selfband.core.video.CanvasScene
 import io.github.higor0227.selfband.core.video.CanvasScenes
+import io.github.higor0227.selfband.core.video.ProxyGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -81,6 +84,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -209,6 +213,8 @@ class RecorderViewModel @Inject constructor(
     private val camera: VideoCamera,
     private val waveforms: Waveforms,
     canvasFactory: CanvasPreviewFactory,
+    private val proxies: ProxyGenerator,
+    settings: AppSettingsRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -254,9 +260,24 @@ class RecorderViewModel @Inject constructor(
             val clock = s.presentationClock
             if (s.transport != TransportState.IDLE && clock != null) clock.positionAt(timeNanos) else playhead.toDouble()
         }
+        // Rebuilt when a proxy is finished too, so the preview can switch to it (SPEC 3.5).
         viewModelScope.launch {
-            repository.observe(projectId).filterNotNull().map(::sceneOf).distinctUntilChanged()
+            combine(repository.observe(projectId).filterNotNull(), proxies.state.map { it.finished }.distinctUntilChanged()) { p, _ -> p }
+                .map(::sceneOf).flowOn(Dispatchers.IO).distinctUntilChanged()
                 .collect { canvasPreview.setScene(it) }
+        }
+        viewModelScope.launch {
+            settings.settings.map { it.proxyMode }.distinctUntilChanged().collect { canvasPreview.setProxyMode(it) }
+        }
+        // Proxies of new takes are made in the background, never while recording.
+        viewModelScope.launch {
+            repository.observe(projectId).filterNotNull().collect { p ->
+                proxies.request(p) { trackId, name -> repository.takeAudioFile(p.id, trackId, name) }
+            }
+        }
+        viewModelScope.launch {
+            engine.status.map { it.transport == TransportState.RECORDING }.distinctUntilChanged()
+                .collect { proxies.setPaused(it) }
         }
         // Ghost: load a still of the chosen track's active take whenever the choice changes.
         viewModelScope.launch {
@@ -1209,6 +1230,7 @@ class RecorderViewModel @Inject constructor(
         repository.takeAudioFile(project.id, trackId, take.audioFile).delete()
         repository.takeAudioFile(project.id, trackId, take.audioFile + Waveforms.CACHE_SUFFIX).delete()
         repository.takeAudioFile(project.id, trackId, take.video?.file ?: "${take.id}.mp4").delete()
+        deleteProxy(project.id, trackId, take.id)
         repository.update(project.id) { p ->
             p.copy(tracks = p.tracks.map { t ->
                 if (t.id != trackId) return@map t
@@ -1222,6 +1244,13 @@ class RecorderViewModel @Inject constructor(
         Log.i(LOG_TAG, "Take $takeId removed from track $trackId")
     }
 
+    /** The proxy (SPEC 3.6) and a half-made one, if any. */
+    private fun deleteProxy(projectId: String, trackId: String, takeId: String) {
+        val proxy = repository.takeAudioFile(projectId, trackId, Proxies.fileName(takeId))
+        proxy.delete()
+        File(proxy.path + ".tmp").delete()
+    }
+
     private suspend fun removeTrack(trackId: String) {
         val project = currentProject()
         project.tracks.firstOrNull { it.id == trackId }?.takes?.forEach { take ->
@@ -1229,6 +1258,7 @@ class RecorderViewModel @Inject constructor(
             repository.takeAudioFile(project.id, trackId, take.audioFile + Waveforms.CACHE_SUFFIX).delete()
             // The video may exist before the take knows about it (recording in progress).
             repository.takeAudioFile(project.id, trackId, take.video?.file ?: "${take.id}.mp4").delete()
+            deleteProxy(project.id, trackId, take.id)
         }
         // The track folder, now empty (File.delete leaves it alone if anything is left).
         repository.takeAudioFile(project.id, trackId, "x").parentFile?.delete()

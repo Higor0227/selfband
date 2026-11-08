@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 6 — Scale and experience (planning)
+## Current phase: Phase 6 — Scale and experience (6a confirmed; 6b in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Phase 6 is split into 6a (preview proxies), 6b (multi-pass export + tests with 12–16 tracks), 6c (settings: defaults, theme, language, verbose log), 6d (first-run wizard) and 6e (user-saved layout templates); proxies come first because they are the biggest risk of the phase. 6a was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -690,3 +690,46 @@ Use a project with 2+ tracks with video, a trim and some layout/background chang
 - 60 fps only makes the export smoother when the takes have 60 fps; the camera records at 30 fps today.
 - The decoder check counts instances only. Real throughput (several 4K decodes at once) is measured in Phase 6 together with proxies.
 - Phase 5 (end of the MVP) is complete.
+
+## Phase 6 — Scale and experience
+
+### 6a — Preview proxies (confirmed by the owner on 2026-11-08)
+- **What a proxy is (SPEC 3.5, 3.6):** a light copy of a take video, `tracks/<trackId>/<takeId>.proxy.mp4`.
+  - H.264, short side 540 (never upscaled), ≈ 0.12 bits per pixel (≈ 1.9 Mbps at 540p30), a key frame every 0.25 s so seeking and scrubbing stay quick.
+  - Every frame keeps the original's presentation time and the rotation stays metadata, so the proxy shows the same frames at the same moments; the per-take video offset and the layout apply unchanged.
+- **Made in the background:** after a take is saved, the proxies of the active takes that lack one are queued.
+  - One at a time, on a low-priority thread: decode → draw scaled with the compositor's layer shader → encode → mux into a `.tmp` file, renamed when complete.
+  - Paused while recording (the camera's encoder and the disk come first); the proxy in progress is abandoned and redone afterwards.
+  - Opening a project also queues missing proxies of older takes.
+  - Deleting a take or track deletes its proxy. A failed proxy is not retried until the app restarts; the preview keeps the original.
+- **When the preview uses them:** new setting **Configurações → Proxies na prévia**:
+  - **Automático** (default): from 8 videos on screen ("~8 tracks"), or when the originals need more simultaneous decoders than the device declares (`getMaxSupportedInstances`), or when the preview **measures** that it cannot keep up (more than 25 % of the frames dropped for two 3-second intervals in a row while frames flow; then proxies until the screen is left).
+  - **Sempre** / **Nunca**.
+  - Videos without a proxy yet use the original; the preview switches to a proxy as soon as it is finished.
+- **Export is unchanged:** it always decodes the originals.
+- **Settings screen:** the gear on the projects list now opens **Configurações** (proxies, plus the link to **Diagnóstico de áudio**). Settings are saved in `files/settings.json`; 6c adds the defaults, theme and language there.
+- The decoder-instance check moved to `:core:video` (`DecoderInstances`), shared by the preview and the export.
+- 8 new tests (proxy size, the automatic rule, settings file). 96 unit tests in total.
+- Checked by me on the phone, project "Música 2" (3 video tracks, 1080p):
+  - Opening the project queued 3 proxies; each 8 s take took 0.7–0.9 s. 960×540, 1.96 MB against 16.1 MB.
+  - Original vs proxy: same 239 frames, **identical frame times** (0 difference), same rotation matrix; 30 key frames against 8.
+  - **Sempre:** the log says "proxies on", the canvas shows the 3 layers correctly, and playback runs at 30 frames per second per layer (90 per 3 s), with only a few frames skipped right after start.
+  - **Nunca** and **Automático** saved and applied. With 3 videos, Automático keeps the originals.
+  - A deleted proxy is made again when the project is reopened.
+  - I left the setting on **Automático**.
+  - **Not tested by me:** the pause during recording (I did not record on your phone), and the automatic switch with 8+ videos or measured slowness (that comes with 6b's big test project).
+
+### 6a checklist (owner)
+1. Open a project with video takes and wait a few seconds. In **Configurações**, "Gerando N proxies…" shows while they are being made and disappears when done.
+2. Set **Proxies na prévia → Sempre** and go back to the project. The preview looks the same, only a little softer; play it and check that the videos stay in sync with the audio (the clap) exactly as before.
+3. Scrub the timeline back and forth with **Sempre**: frames follow the finger at least as well as before.
+4. Record a new take with **Sempre**: during recording nothing is generated; a few seconds after stopping, its proxy appears and the preview switches to it (slightly softer).
+5. Set **Nunca**: the preview goes back to the originals (sharper).
+6. Leave **Automático**: with fewer than 8 videos the preview uses the originals.
+7. Export a video: the file is full quality (the export never uses proxies).
+8. Delete a take: its proxy goes too (nothing to see; I check the files).
+
+### 6a known issues / notes
+- With fewer than 8 videos on this phone the automatic mode keeps the originals; the real test of the automatic switch is 6b's 12–16 track project.
+- Proxies take disk space (≈ 14 MB per minute per track at 540p30).
+- The speed measurement is per screen: leaving and reopening the project measures again.

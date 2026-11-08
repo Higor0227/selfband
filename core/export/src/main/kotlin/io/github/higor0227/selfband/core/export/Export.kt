@@ -106,8 +106,8 @@ interface VideoEncoders {
     suspend fun decoderLimit(projectId: String): DecoderLimit?
 }
 
-/** More videos ([needed]) than simultaneous decoders of their kind ([available]). */
-data class DecoderLimit(val needed: Int, val available: Int)
+/** More videos ([DecoderLimit.needed]) than simultaneous decoders of their kind ([DecoderLimit.available]). */
+typealias DecoderLimit = io.github.higor0227.selfband.core.video.DecoderLimit
 
 enum class ExportFailure {
     /** Nothing to export: no recorded audio, or an empty trim. */

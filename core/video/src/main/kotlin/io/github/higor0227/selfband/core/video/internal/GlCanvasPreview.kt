@@ -8,12 +8,16 @@ import android.util.Log
 import android.view.Choreographer
 import android.view.Surface
 import io.github.higor0227.selfband.core.model.LOG_TAG
+import io.github.higor0227.selfband.core.model.ProxyMode
+import io.github.higor0227.selfband.core.model.Proxies
 import io.github.higor0227.selfband.core.video.CanvasPreview
 import io.github.higor0227.selfband.core.video.CanvasPreviewFactory
 import io.github.higor0227.selfband.core.video.CanvasScene
+import io.github.higor0227.selfband.core.video.DecoderInstances
 import io.github.higor0227.selfband.core.video.PositionSource
 import io.github.higor0227.selfband.core.video.SceneLayer
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -27,6 +31,10 @@ internal class GlCanvasPreviewFactory @Inject constructor() : CanvasPreviewFacto
  * thread with a Looper; Choreographer drives it at the display rate. Each vsync it publishes
  * the target media time of every layer (from the audio clock, ahead by the display latency),
  * latches the frames the decoders delivered and redraws when something changed.
+ *
+ * Proxies (SPEC 3.5): the scene drawn is the one given, or the same scene on the layers'
+ * proxies when [Proxies.use] says so for the current mode, decoder capacity and measured
+ * speed.
  */
 internal class GlCanvasPreview : CanvasPreview {
     private val thread = HandlerThread("SelfbandCanvas").apply { start() }
@@ -39,7 +47,18 @@ internal class GlCanvasPreview : CanvasPreview {
     private var window: EGLSurface? = null
     private var width = 0
     private var height = 0
+    /** The scene as given; [scene] is what is drawn (possibly on proxies). */
+    private var source: CanvasScene? = null
     private var scene: CanvasScene? = null
+    private var proxyMode = ProxyMode.AUTO
+    /** The originals need more decoders than the device has. */
+    private var overCapacity = false
+    /** Measured: the originals are not decoded in time (sticky for this preview). */
+    private var slow = false
+    private var slowIntervals = 0
+    private var usingProxies = false
+    /** Reads video formats for the capacity check, away from the render thread. */
+    private val capacityExecutor = Executors.newSingleThreadExecutor { Thread(it, "SelfbandCanvasCaps").apply { isDaemon = true } }
     private var position = PositionSource { 0.0 }
     private val layers = mutableListOf<LayerState>()
     private var dirty = true
@@ -109,13 +128,46 @@ internal class GlCanvasPreview : CanvasPreview {
 
     override fun setScene(scene: CanvasScene) {
         handler.post {
-            this.scene = scene
-            if (ready) {
-                if (!paused) syncLayers(scene)
-                drawer.background.setImage(scene.image) { dirty = true }
-            }
-            dirty = true
+            source = scene
+            applyScene()
         }
+        val originals = scene.decodedLayers.map { it.file }
+        capacityExecutor.execute {
+            val over = DecoderInstances.shortfall(originals) != null
+            handler.post {
+                if (source === scene && over != overCapacity) {
+                    overCapacity = over
+                    applyScene()
+                }
+            }
+        }
+    }
+
+    override fun setProxyMode(mode: ProxyMode) {
+        handler.post {
+            if (proxyMode == mode) return@post
+            proxyMode = mode
+            applyScene()
+        }
+    }
+
+    /** Render thread: draws [source] or its proxy version, re-syncing the decoders on a change. */
+    private fun applyScene() {
+        val src = source ?: return
+        val videos = src.decodedLayers.size
+        val proxies = Proxies.use(proxyMode, videos, overCapacity, slow)
+        if (proxies != usingProxies) {
+            usingProxies = proxies
+            Log.i(LOG_TAG, "canvas: proxies ${if (proxies) "on" else "off"} (mode=$proxyMode videos=$videos overCapacity=$overCapacity slow=$slow)")
+        }
+        val next = if (proxies) src.withProxies() else src
+        if (next == scene) return
+        scene = next
+        if (ready) {
+            if (!paused) syncLayers(next)
+            drawer.background.setImage(next.image) { dirty = true }
+        }
+        dirty = true
     }
 
     override fun setPosition(source: PositionSource) {
@@ -154,6 +206,7 @@ internal class GlCanvasPreview : CanvasPreview {
             }
             thread.quitSafely()
         }
+        capacityExecutor.shutdown()
     }
 
     /**
@@ -247,11 +300,26 @@ internal class GlCanvasPreview : CanvasPreview {
     private var lastPosition = 0.0
     private var lastDropped = 0L
 
-    /** Every few seconds while frames flow: frames shown and dropped per layer. */
+    /**
+     * Every few seconds while frames flow: frames shown and dropped per layer. Also the speed
+     * measurement: originals dropping too many frames for [SLOW_INTERVALS] intervals in a row
+     * mark the preview slow (proxies from then on, in automatic mode).
+     */
     private fun logDiagnostics(nowNanos: Long) {
         if (nowNanos - lastLogNanos < LOG_INTERVAL_NANOS) return
         lastLogNanos = nowNanos
         val dropped = layers.sumOf { it.decoder?.droppedFrames ?: 0L }
+        val droppedNow = (dropped - lastDropped).coerceAtLeast(0)
+        val shownNow = layers.sumOf { it.latched.toLong() }
+        if (!usingProxies && !slow) {
+            val frames = droppedNow + shownNow
+            slowIntervals = if (frames >= SLOW_MIN_FRAMES && droppedNow > frames * SLOW_DROP_RATIO) slowIntervals + 1 else 0
+            if (slowIntervals >= SLOW_INTERVALS) {
+                slow = true
+                Log.i(LOG_TAG, "canvas: originals too slow (dropped $droppedNow of $frames frames)")
+                applyScene()
+            }
+        }
         if (layers.none { it.latched > 0 } && dropped == lastDropped) return
         lastDropped = dropped
         val line = layers.joinToString(" | ") {
@@ -272,5 +340,9 @@ internal class GlCanvasPreview : CanvasPreview {
         const val DISPLAY_LATENCY_VSYNCS = 2
         const val DETACH_TIMEOUT_MS = 1_000L
         const val LOG_INTERVAL_NANOS = 3_000_000_000L
+        /** Speed measurement: share of dropped frames, over intervals with at least this many frames. */
+        const val SLOW_DROP_RATIO = 0.25
+        const val SLOW_MIN_FRAMES = 30L
+        const val SLOW_INTERVALS = 2
     }
 }

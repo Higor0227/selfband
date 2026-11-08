@@ -7,7 +7,7 @@ plugins {
 dependencies {
     api(project(":core:model"))
     implementation(project(":core:audio"))
-    implementation(project(":core:video"))
+    api(project(":core:video"))
     implementation(project(":core:project"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)

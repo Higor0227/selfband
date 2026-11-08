@@ -7,6 +7,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import io.github.higor0227.selfband.core.video.CanvasPreviewFactory
 import io.github.higor0227.selfband.core.video.CanvasRendererFactory
+import io.github.higor0227.selfband.core.video.ProxyGenerator
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -16,4 +17,7 @@ internal abstract class VideoModule {
 
     @Binds
     abstract fun bindCanvasRendererFactory(impl: GlCanvasRendererFactory): CanvasRendererFactory
+
+    @Binds
+    abstract fun bindProxyGenerator(impl: MediaCodecProxyGenerator): ProxyGenerator
 }

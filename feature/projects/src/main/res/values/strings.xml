@@ -3,7 +3,7 @@
 <resources>
     <string name="projects_title">Projects</string>
     <string name="projects_empty">No projects yet. Tap \"New project\" to start.</string>
-    <string name="open_diagnostics">Audio diagnostics</string>
+    <string name="open_settings">Settings</string>
     <string name="new_project">New project</string>
     <string name="project_name">Name</string>
     <string name="default_project_name">Song %1$d</string>

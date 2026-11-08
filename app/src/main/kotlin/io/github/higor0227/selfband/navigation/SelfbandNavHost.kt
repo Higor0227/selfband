@@ -14,6 +14,7 @@ import io.github.higor0227.selfband.feature.layout.LayoutRoute
 import io.github.higor0227.selfband.feature.projects.ProjectsRoute
 import io.github.higor0227.selfband.feature.recorder.RecorderRoute
 import io.github.higor0227.selfband.feature.recorder.RecorderViewModel
+import io.github.higor0227.selfband.feature.settings.SettingsRoute
 import io.github.higor0227.selfband.feature.settings.diagnostics.DiagnosticsRoute
 
 /**
@@ -25,6 +26,7 @@ private object Routes {
     const val RECORDER = "recorder/{${RecorderViewModel.ARG_PROJECT_ID}}"
     const val LAYOUT = "layout/{${LayoutEditorViewModel.ARG_PROJECT_ID}}"
     const val EXPORT = "export/{${ExportViewModel.ARG_PROJECT_ID}}"
+    const val SETTINGS = "settings"
     const val AUDIO_DIAGNOSTICS = "settings/audio-diagnostics"
 
     fun recorder(projectId: String) = "recorder/$projectId"
@@ -39,7 +41,7 @@ fun SelfbandNavHost() {
         composable(Routes.PROJECTS) {
             ProjectsRoute(
                 onOpenProject = { id -> navController.navigate(Routes.recorder(id)) },
-                onOpenDiagnostics = { navController.navigate(Routes.AUDIO_DIAGNOSTICS) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
         }
         composable(
@@ -63,6 +65,12 @@ fun SelfbandNavHost() {
             arguments = listOf(navArgument(ExportViewModel.ARG_PROJECT_ID) { type = NavType.StringType }),
         ) {
             ExportRoute(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.SETTINGS) {
+            SettingsRoute(
+                onBack = { navController.popBackStack() },
+                onOpenDiagnostics = { navController.navigate(Routes.AUDIO_DIAGNOSTICS) },
+            )
         }
         composable(Routes.AUDIO_DIAGNOSTICS) {
             DiagnosticsRoute(onBack = { navController.popBackStack() })

@@ -9,6 +9,7 @@ import io.github.higor0227.selfband.core.model.LayoutTemplate
 import io.github.higor0227.selfband.core.model.LayoutTemplates
 import io.github.higor0227.selfband.core.model.NormRect
 import io.github.higor0227.selfband.core.model.Project
+import io.github.higor0227.selfband.core.model.Proxies
 import io.github.higor0227.selfband.core.model.Track
 import io.github.higor0227.selfband.core.model.displayAspect
 import io.github.higor0227.selfband.core.model.value
@@ -19,7 +20,8 @@ object CanvasScenes {
      * What the canvas shows for [project]: one layer per track whose active take has video,
      * placed by the layout in effect. [canvas] overrides the stored canvas (live edits).
      * [file] resolves a take file name inside a track's directory, [projectFile] a file name
-     * inside the project directory (the background image).
+     * inside the project directory (the background image). Proxies are filled in where their
+     * file exists (checks the disk).
      */
     fun build(
         project: Project,
@@ -56,6 +58,7 @@ object CanvasScenes {
             // Without a measured start, assume the video began with the take's audio.
             startFrame = video.startFrame(p.sampleRate) ?: take.startFrame.toDouble(),
             layer = layer,
+            proxy = file(track.id, Proxies.fileName(take.id)).takeIf { it.exists() },
         )
     }
 }
