@@ -80,7 +80,11 @@ import io.github.higor0227.selfband.core.ui.component.LevelMeter
 import java.util.Locale
 
 @Composable
-fun RecorderRoute(onBack: () -> Unit, viewModel: RecorderViewModel = hiltViewModel()) {
+fun RecorderRoute(
+    onBack: () -> Unit,
+    onOpenLayout: (projectId: String) -> Unit,
+    viewModel: RecorderViewModel = hiltViewModel(),
+) {
     val context = LocalContext.current
     fun has(permission: String) =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
@@ -165,6 +169,7 @@ fun RecorderRoute(onBack: () -> Unit, viewModel: RecorderViewModel = hiltViewMod
         canvasActions = CanvasActions(
             onAspectRatio = viewModel::setAspectRatio,
             onTemplate = viewModel::setLayoutTemplate,
+            onEditLayout = { onOpenLayout(viewModel.projectId) },
         ),
     )
 }

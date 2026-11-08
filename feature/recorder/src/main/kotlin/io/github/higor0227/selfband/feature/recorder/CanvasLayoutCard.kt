@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -38,6 +39,7 @@ import io.github.higor0227.selfband.core.model.value
 data class CanvasActions(
     val onAspectRatio: (AspectRatio) -> Unit,
     val onTemplate: (String) -> Unit,
+    val onEditLayout: () -> Unit,
 )
 
 /** Canvas format and layout template (SPEC 2.6). Shown while the panel shows the canvas. */
@@ -61,7 +63,8 @@ fun CanvasLayoutCard(state: RecorderUiState, actions: CanvasActions) {
             }
 
             Text(stringResource(R.string.canvas_layout), style = MaterialTheme.typography.labelLarge)
-            val current = project.canvas.templateId ?: LayoutTemplates.AUTO
+            // null = free layout (edited in the layout editor): no template is selected.
+            val current = project.canvas.templateId
             val autoSlots = CanvasLayout.slots(project.copy(canvas = project.canvas.copy(templateId = LayoutTemplates.AUTO)))
                 .orEmpty()
             FlowRow(
@@ -73,8 +76,8 @@ fun CanvasLayoutCard(state: RecorderUiState, actions: CanvasActions) {
                     description = stringResource(R.string.layout_auto),
                     slots = autoSlots,
                     aspect = project.aspectRatio.value,
-                    selected = current == LayoutTemplates.AUTO ||
-                        LayoutTemplates.builtIn.none { it.id == current },
+                    selected = current != null && (current == LayoutTemplates.AUTO ||
+                        LayoutTemplates.builtIn.none { it.id == current }),
                     onClick = { actions.onTemplate(LayoutTemplates.AUTO) },
                 )
                 LayoutTemplates.builtIn.forEach { template ->
@@ -97,7 +100,15 @@ fun CanvasLayoutCard(state: RecorderUiState, actions: CanvasActions) {
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+            if (current == null) {
+                Text(
+                    stringResource(R.string.layout_free),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             Text(stringResource(R.string.canvas_layout_hint), style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = actions.onEditLayout) { Text(stringResource(R.string.edit_layout)) }
         }
     }
 }

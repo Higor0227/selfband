@@ -4,7 +4,7 @@ Status against the phases in `SPEC.md` §4.
 
 ## Current phase: Phase 3 — Canvas and preview (in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates) and 3c (layer editing, background, guides/snap); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (background, own templates, global trim); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -369,3 +369,52 @@ Split into milestones (owner's choice): **1a** engine + recording + playback + m
 - Template choice is per project. Track order decides which track goes in which space; reordering comes with 3c (z-order / drag).
 - A format change briefly shows the old frame stretched until the next frame is drawn (TextureView resize).
 
+
+### 3c — Done (confirmed by owner on 2026-11-08)
+- **Layout editor (SPEC 2.6):** its own screen in `:feature:layout`, opened with "Editar layout" in the Canvas card. The canvas shows the frame at the playhead (slider, no audio).
+- **Gestures on the canvas:**
+  - tap selects the topmost layer under the finger (or pick it with the "Trilha N" chips, which also reach hidden layers);
+  - **Mover** mode: drag moves; pinch or drag a corner scales, keeping the shape (the opposite corner stays put);
+  - **Recortar** mode: the dashed outline shows the whole video. Edge/corner handles crop without moving or scaling the video on screen. Drag inside reframes, pinch zooms the video. "Restaurar recorte" undoes it.
+- **Snap:** while moving, the layer's edges/center snap to the canvas edges/center and to the other layers' edges/centers (guide lines are drawn). With no guide in reach, it snaps to a 12-step grid. There is a switch to turn snap off.
+- **Selected layer controls:**
+  - align (left/center/right, top/middle/bottom);
+  - Para frente / Para trás (z-order);
+  - Visível;
+  - sliders for opacity, corners and border, with 8 border colors.
+- **Free layout:**
+  - The first edit freezes the current template into stored layers (`templateId = null`), so the picture does not jump.
+  - The Canvas card then selects no template and says "Layout livre". Picking a template replaces it.
+  - Edits show live and are saved to project.json at the end of each gesture or slider drag.
+- Video decoders are released when a screen stops, so the recorder and the editor never hold codecs at the same time.
+- Math lives in `core:model` (`LayerEditing`). The video is never distorted: the crop keeps the frame's pixel shape. 7 new tests (`LayerEditingTest`), 54 unit tests in total.
+- On the phone, in a test project with 2 video tracks (deleted afterwards), all of these worked and were saved in project.json:
+  - select, move, corner scale (it pivots on the opposite corner);
+  - top-edge crop (the video stays in place);
+  - align center, Para frente;
+  - opacity, corners, border.
+  - The recorder's canvas showed the same free layout afterwards, with no errors in logcat.
+
+### 3c checklist (owner)
+1. In a project with 2+ video tracks, open "Canvas", then "Editar layout".
+2. **Select:** tap a layer. It gets an outline with corner handles and its "Trilha N" chip lights up. Tap empty space to deselect.
+3. **Move:** drag a layer. Near the canvas center/edges or another layer's edges it snaps and a guide line appears. Turn snap off: it moves freely.
+4. **Scale:** pinch on the layer, and drag a corner. The shape is kept and the video is not stretched.
+5. **Crop:** switch to "Recortar":
+   - drag the edge and corner handles: the window shrinks/grows, but the video does not move or get squashed;
+   - drag inside: the video reframes;
+   - pinch: the video zooms inside the window;
+   - "Restaurar recorte" brings back the whole frame.
+6. **Order / look:**
+   - Para frente / Para trás change which layer is on top;
+   - Visível hides the layer (its outline goes dashed);
+   - opacity, corners and border change live, and the border color swatches work.
+7. **Playhead:** move the slider. The canvas shows that moment of every video.
+8. **Persistence:** go back. The recorder canvas shows the same layout and the card says "Layout livre". Leave the project and come back: it is kept. Play: the videos stay in sync.
+9. Pick a template in the card: it replaces the free layout.
+
+### 3c known issues / notes
+- Pinch could not be tested from adb (single touch only). Please check it carefully (items 4 and 5).
+- One drag of a crop handle during my test moved much less than the finger, and I could not reproduce it. If a handle "lags behind" the finger, tell me.
+- No undo yet. Picking a template after hand edits discards them.
+- Next (3d, after your OK): background (color / blur of a track / image), saving your own layouts as templates, global trim.

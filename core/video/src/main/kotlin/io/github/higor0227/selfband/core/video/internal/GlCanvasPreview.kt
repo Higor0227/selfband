@@ -118,7 +118,7 @@ internal class GlCanvasPreview : CanvasPreview {
     override fun setScene(scene: CanvasScene) {
         handler.post {
             this.scene = scene
-            if (ready) syncLayers(scene)
+            if (ready && !paused) syncLayers(scene)
             dirty = true
         }
     }
@@ -130,10 +130,16 @@ internal class GlCanvasPreview : CanvasPreview {
         }
     }
 
+    /** Pausing frees the decoders (another screen may need them); resuming recreates them. */
     override fun setPaused(paused: Boolean) {
         handler.post {
+            if (this.paused == paused) return@post
             this.paused = paused
-            if (!paused) {
+            if (paused) {
+                layers.forEach { it.release() }
+                layers.clear()
+            } else {
+                scene?.let { if (ready) syncLayers(it) }
                 dirty = true
                 postCallback()
             }

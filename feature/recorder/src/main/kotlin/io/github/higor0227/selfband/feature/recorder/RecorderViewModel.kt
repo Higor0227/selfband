@@ -34,7 +34,6 @@ import io.github.higor0227.selfband.core.model.AudioDeviceType
 import io.github.higor0227.selfband.core.model.CalibrationMethod
 import io.github.higor0227.selfband.core.model.CameraLens
 import io.github.higor0227.selfband.core.model.CameraSettings
-import io.github.higor0227.selfband.core.model.CanvasLayout
 import io.github.higor0227.selfband.core.model.VideoResolution
 import io.github.higor0227.selfband.core.model.DeviceProfile
 import io.github.higor0227.selfband.core.model.InputChannel
@@ -58,7 +57,7 @@ import io.github.higor0227.selfband.core.project.ProjectRepository
 import io.github.higor0227.selfband.core.video.CanvasPreview
 import io.github.higor0227.selfband.core.video.CanvasPreviewFactory
 import io.github.higor0227.selfband.core.video.CanvasScene
-import io.github.higor0227.selfband.core.video.SceneLayer
+import io.github.higor0227.selfband.core.video.CanvasScenes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -207,7 +206,7 @@ class RecorderViewModel @Inject constructor(
     val canvasPreview: CanvasPreview = canvasFactory.create()
     @Volatile private var playhead = 0L
 
-    private val projectId: String = checkNotNull(savedStateHandle[ARG_PROJECT_ID])
+    val projectId: String = checkNotNull(savedStateHandle[ARG_PROJECT_ID])
     private val local = MutableStateFlow(RecorderUiState())
 
     // Serializes engine operations triggered by the UI and by device events.
@@ -336,24 +335,8 @@ class RecorderViewModel @Inject constructor(
         local.update { it.copy(playheadFrames = clamped) }
     }
 
-    private fun sceneOf(project: Project): CanvasScene {
-        val tracks = project.tracks.associateBy { it.id }
-        val layers = CanvasLayout.effectiveLayers(project).mapNotNull { layer ->
-            val take = tracks[layer.trackId]?.activeTake ?: return@mapNotNull null
-            val video = take.video ?: return@mapNotNull null
-            SceneLayer(
-                file = repository.takeAudioFile(project.id, layer.trackId, video.file),
-                width = video.width,
-                height = video.height,
-                rotationDegrees = video.rotationDegrees,
-                frameRate = video.frameRate,
-                // Without a measured start, assume the video began with the take's audio.
-                startFrame = video.startFrame(project.sampleRate) ?: take.startFrame.toDouble(),
-                layer = layer,
-            )
-        }
-        return CanvasScene(project.aspectRatio, project.sampleRate, project.canvas.backgroundColor, layers)
-    }
+    private fun sceneOf(project: Project): CanvasScene =
+        CanvasScenes.build(project, { trackId, name -> repository.takeAudioFile(project.id, trackId, name) })
 
     // --- camera (SPEC 2.2, 3.4) ----------------------------------------------------------
 

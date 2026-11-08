@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <string name="back">Back</string>
+    <string name="layout_editor_title">Layout</string>
+    <string name="layout_no_video">No track has video yet.</string>
+    <string name="layout_track_n">Track %1$d</string>
+    <string name="layout_hidden_suffix">(hidden)</string>
+    <string name="layout_snap">Snap to guides and grid</string>
+    <string name="layout_template_note">Editing a layer turns the template into a free layout.</string>
+    <string name="layout_hint_select">Tap a layer on the canvas, or pick a track above.</string>
+    <string name="layout_mode_move">Move</string>
+    <string name="layout_mode_crop">Crop</string>
+    <string name="layout_hint_move">Drag to move, pinch or drag a corner to resize.</string>
+    <string name="layout_hint_crop">Drag the handles to crop. Drag inside to reframe, pinch to zoom the video.</string>
+    <string name="layout_reset_crop">Reset crop</string>
+    <string name="layout_align">Align</string>
+    <string name="align_left">Left</string>
+    <string name="align_center_h">Center</string>
+    <string name="align_right">Right</string>
+    <string name="align_top">Top</string>
+    <string name="align_center_v">Middle</string>
+    <string name="align_bottom">Bottom</string>
+    <string name="layout_bring_forward">Bring forward</string>
+    <string name="layout_send_backward">Send backward</string>
+    <string name="layout_visible">Visible</string>
+    <string name="layout_opacity">Opacity</string>
+    <string name="layout_corners">Corners</string>
+    <string name="layout_border">Border</string>
+    <string name="layout_border_color">Border color</string>
+</resources>

@@ -33,6 +33,7 @@ dependencies {
     implementation(project(":core:audio"))
     implementation(project(":core:project"))
     implementation(project(":feature:projects"))
+    implementation(project(":feature:layout"))
     implementation(project(":feature:recorder"))
     implementation(project(":feature:settings"))
 

@@ -53,7 +53,7 @@ interface CanvasPreview {
 
     fun setPosition(source: PositionSource)
 
-    /** While paused nothing is drawn and the decoders idle (screen not visible). */
+    /** While paused nothing is drawn and the decoders are released (screen not visible). */
     fun setPaused(paused: Boolean)
 
     /** Releases decoders, GL objects and the render thread. The instance is unusable after. */

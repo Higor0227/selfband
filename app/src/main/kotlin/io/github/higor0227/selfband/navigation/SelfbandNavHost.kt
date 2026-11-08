@@ -7,6 +7,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import io.github.higor0227.selfband.feature.layout.LayoutEditorViewModel
+import io.github.higor0227.selfband.feature.layout.LayoutRoute
 import io.github.higor0227.selfband.feature.projects.ProjectsRoute
 import io.github.higor0227.selfband.feature.recorder.RecorderRoute
 import io.github.higor0227.selfband.feature.recorder.RecorderViewModel
@@ -19,9 +21,11 @@ import io.github.higor0227.selfband.feature.settings.diagnostics.DiagnosticsRout
 private object Routes {
     const val PROJECTS = "projects"
     const val RECORDER = "recorder/{${RecorderViewModel.ARG_PROJECT_ID}}"
+    const val LAYOUT = "layout/{${LayoutEditorViewModel.ARG_PROJECT_ID}}"
     const val AUDIO_DIAGNOSTICS = "settings/audio-diagnostics"
 
     fun recorder(projectId: String) = "recorder/$projectId"
+    fun layout(projectId: String) = "layout/$projectId"
 }
 
 @Composable
@@ -38,7 +42,16 @@ fun SelfbandNavHost() {
             Routes.RECORDER,
             arguments = listOf(navArgument(RecorderViewModel.ARG_PROJECT_ID) { type = NavType.StringType }),
         ) {
-            RecorderRoute(onBack = { navController.popBackStack() })
+            RecorderRoute(
+                onBack = { navController.popBackStack() },
+                onOpenLayout = { id -> navController.navigate(Routes.layout(id)) },
+            )
+        }
+        composable(
+            Routes.LAYOUT,
+            arguments = listOf(navArgument(LayoutEditorViewModel.ARG_PROJECT_ID) { type = NavType.StringType }),
+        ) {
+            LayoutRoute(onBack = { navController.popBackStack() })
         }
         composable(Routes.AUDIO_DIAGNOSTICS) {
             DiagnosticsRoute(onBack = { navController.popBackStack() })

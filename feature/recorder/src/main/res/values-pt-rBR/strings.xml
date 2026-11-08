@@ -162,4 +162,6 @@
     <string name="layout_slots">Layout com %1$d espaços</string>
     <string name="canvas_hidden_tracks">%1$d trilha(s) com vídeo não cabem neste layout e ficam ocultas.</string>
     <string name="canvas_layout_hint">As trilhas ocupam os espaços em ordem. Auto se adapta ao número de trilhas e ao formato dos vídeos. Trocar o formato mantém o enquadramento de cada vídeo.</string>
+    <string name="layout_free">Layout livre (editado à mão). Escolher um template o substitui.</string>
+    <string name="edit_layout">Editar layout</string>
 </resources>

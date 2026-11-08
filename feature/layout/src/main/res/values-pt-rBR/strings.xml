@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <string name="back">Voltar</string>
+    <string name="layout_editor_title">Layout</string>
+    <string name="layout_no_video">Nenhuma trilha tem vídeo ainda.</string>
+    <string name="layout_track_n">Trilha %1$d</string>
+    <string name="layout_hidden_suffix">(oculta)</string>
+    <string name="layout_snap">Encaixar em guias e grade</string>
+    <string name="layout_template_note">Editar uma camada transforma o template em layout livre.</string>
+    <string name="layout_hint_select">Toque numa camada no canvas ou escolha uma trilha acima.</string>
+    <string name="layout_mode_move">Mover</string>
+    <string name="layout_mode_crop">Recortar</string>
+    <string name="layout_hint_move">Arraste para mover; pinça ou arraste um canto para redimensionar.</string>
+    <string name="layout_hint_crop">Arraste as alças para recortar. Arraste dentro para reenquadrar, pinça para dar zoom no vídeo.</string>
+    <string name="layout_reset_crop">Restaurar recorte</string>
+    <string name="layout_align">Alinhar</string>
+    <string name="align_left">Esquerda</string>
+    <string name="align_center_h">Centro</string>
+    <string name="align_right">Direita</string>
+    <string name="align_top">Topo</string>
+    <string name="align_center_v">Meio</string>
+    <string name="align_bottom">Base</string>
+    <string name="layout_bring_forward">Para frente</string>
+    <string name="layout_send_backward">Para trás</string>
+    <string name="layout_visible">Visível</string>
+    <string name="layout_opacity">Opacidade</string>
+    <string name="layout_corners">Cantos</string>
+    <string name="layout_border">Borda</string>
+    <string name="layout_border_color">Cor da borda</string>
+</resources>

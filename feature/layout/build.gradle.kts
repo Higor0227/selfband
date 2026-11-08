@@ -2,3 +2,9 @@
 plugins {
     alias(libs.plugins.selfband.android.feature)
 }
+
+dependencies {
+    implementation(project(":core:project"))
+    implementation(project(":core:video"))
+    implementation(libs.androidx.activity.compose)
+}
