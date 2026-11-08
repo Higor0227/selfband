@@ -23,6 +23,9 @@ interface ProjectRepository {
     /** Where a take's audio file lives (directories are created). */
     fun takeAudioFile(projectId: String, trackId: String, fileName: String): File
 
+    /** A media file stored at the project level, e.g. the canvas background picture. */
+    fun projectMediaFile(projectId: String, fileName: String): File
+
     /** Free space on the volume that holds projects, in bytes. */
     fun freeBytes(): Long
 }

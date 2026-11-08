@@ -98,6 +98,9 @@ internal class FileProjectRepository @Inject constructor(
     override fun takeAudioFile(projectId: String, trackId: String, fileName: String): File =
         File(store.trackDir(projectId, trackId).apply { mkdirs() }, fileName)
 
+    override fun projectMediaFile(projectId: String, fileName: String): File =
+        File(store.projectDir(projectId).apply { mkdirs() }, fileName)
+
     override fun freeBytes(): Long = StatFs(root.path).availableBytes
 }
 

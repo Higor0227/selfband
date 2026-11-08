@@ -8,7 +8,7 @@
     <string name="layout_hidden_suffix">(oculta)</string>
     <string name="layout_snap">Encaixar em guias e grade</string>
     <string name="layout_template_note">Editar uma camada transforma o template em layout livre.</string>
-    <string name="layout_hint_select">Toque numa camada no canvas ou escolha uma trilha acima.</string>
+    <string name="layout_hint_select">Toque numa camada no canvas ou escolha uma trilha acima. Sem camada selecionada, você edita o fundo abaixo.</string>
     <string name="layout_mode_move">Mover</string>
     <string name="layout_mode_crop">Recortar</string>
     <string name="layout_hint_move">Arraste para mover; pinça ou arraste um canto para redimensionar.</string>
@@ -28,4 +28,14 @@
     <string name="layout_corners">Cantos</string>
     <string name="layout_border">Borda</string>
     <string name="layout_border_color">Cor da borda</string>
+    <string name="layout_background">Fundo</string>
+    <string name="bg_color">Cor</string>
+    <string name="bg_blur">Desfoque</string>
+    <string name="bg_image">Imagem</string>
+    <string name="bg_blur_track">Trilha desfocada</string>
+    <string name="bg_pick_image">Escolher imagem</string>
+    <string name="bg_change_image">Trocar imagem</string>
+    <string name="bg_importing">Importando imagem…</string>
+    <string name="bg_import_failed">Não foi possível abrir essa imagem.</string>
+    <string name="bg_fallback_color">Cor (aparece até o vídeo ou a imagem carregar)</string>
 </resources>

@@ -12,7 +12,7 @@ import java.nio.ByteOrder
  * opacity computed in the fragment shader. Use on the GL thread only.
  */
 internal class LayerProgram {
-    private val program: Int = link(VERTEX, FRAGMENT)
+    private val program: Int = GlPrograms.link(VERTEX, FRAGMENT)
     private val quad: Int
     private val vao: Int
     private val uFrame = GLES30.glGetUniformLocation(program, "uFrame")
@@ -104,32 +104,6 @@ internal class LayerProgram {
             GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
             GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
             return ids[0]
-        }
-
-        private fun compile(type: Int, source: String): Int {
-            val shader = GLES30.glCreateShader(type)
-            GLES30.glShaderSource(shader, source)
-            GLES30.glCompileShader(shader)
-            val ok = IntArray(1)
-            GLES30.glGetShaderiv(shader, GLES30.GL_COMPILE_STATUS, ok, 0)
-            check(ok[0] != 0) { "shader compile failed: " + GLES30.glGetShaderInfoLog(shader) }
-            return shader
-        }
-
-        private fun link(vertex: String, fragment: String): Int {
-            val vs = compile(GLES30.GL_VERTEX_SHADER, vertex)
-            val fs = compile(GLES30.GL_FRAGMENT_SHADER, fragment)
-            val program = GLES30.glCreateProgram()
-            GLES30.glAttachShader(program, vs)
-            GLES30.glAttachShader(program, fs)
-            GLES30.glBindAttribLocation(program, 0, "aCorner")
-            GLES30.glLinkProgram(program)
-            val ok = IntArray(1)
-            GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, ok, 0)
-            check(ok[0] != 0) { "program link failed: " + GLES30.glGetProgramInfoLog(program) }
-            GLES30.glDeleteShader(vs)
-            GLES30.glDeleteShader(fs)
-            return program
         }
 
         private const val VERTEX = """#version 300 es

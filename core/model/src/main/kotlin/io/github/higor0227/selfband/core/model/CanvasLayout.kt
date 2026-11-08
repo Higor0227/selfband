@@ -131,6 +131,18 @@ object CanvasLayout {
             .sortedWith(compareBy({ it.value.z }, { it.index }))
             .map { it.value }
     }
+
+    /**
+     * Track whose video fills a blurred background: the chosen one if its active take still
+     * has video, else the first video track. Null when the background is not a blur or no
+     * track has video (the solid color is shown then).
+     */
+    fun blurSource(project: Project): Track? {
+        val canvas = project.canvas
+        if (canvas.background != BackgroundKind.BLUR) return null
+        val videoTracks = project.tracks.filter { it.activeTake?.video != null }
+        return videoTracks.firstOrNull { it.id == canvas.backgroundTrackId } ?: videoTracks.firstOrNull()
+    }
 }
 
 /** Width / height of the video as displayed (after rotation). */

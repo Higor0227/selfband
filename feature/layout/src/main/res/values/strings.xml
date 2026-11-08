@@ -8,7 +8,7 @@
     <string name="layout_hidden_suffix">(hidden)</string>
     <string name="layout_snap">Snap to guides and grid</string>
     <string name="layout_template_note">Editing a layer turns the template into a free layout.</string>
-    <string name="layout_hint_select">Tap a layer on the canvas, or pick a track above.</string>
+    <string name="layout_hint_select">Tap a layer on the canvas, or pick a track above. With no layer selected, you edit the background below.</string>
     <string name="layout_mode_move">Move</string>
     <string name="layout_mode_crop">Crop</string>
     <string name="layout_hint_move">Drag to move, pinch or drag a corner to resize.</string>
@@ -28,4 +28,14 @@
     <string name="layout_corners">Corners</string>
     <string name="layout_border">Border</string>
     <string name="layout_border_color">Border color</string>
+    <string name="layout_background">Background</string>
+    <string name="bg_color">Color</string>
+    <string name="bg_blur">Blur</string>
+    <string name="bg_image">Image</string>
+    <string name="bg_blur_track">Blurred track</string>
+    <string name="bg_pick_image">Choose image</string>
+    <string name="bg_change_image">Change image</string>
+    <string name="bg_importing">Importing image…</string>
+    <string name="bg_import_failed">Could not open that image.</string>
+    <string name="bg_fallback_color">Color (shown until the video or image is ready)</string>
 </resources>

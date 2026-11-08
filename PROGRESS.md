@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 3 — Canvas and preview (in progress)
+## Current phase: Phase 3 — Canvas and preview (complete; Phase 4 next)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (background, own templates, global trim); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -418,3 +418,37 @@ Split into milestones (owner's choice): **1a** engine + recording + playback + m
 - One drag of a crop handle during my test moved much less than the finger, and I could not reproduce it. If a handle "lags behind" the finger, tell me.
 - No undo yet. Picking a template after hand edits discards them.
 - Next (3d, after your OK): background (color / blur of a track / image), saving your own layouts as templates, global trim.
+
+### 3d — Done (confirmed by owner on 2026-11-08)
+**Scope (owner, 2026-11-08):** following SPEC §4, 3d is only the canvas background. Global trim moves to Phase 4 (with the waveform offset) and user-saved templates to Phase 6.
+- **Background (SPEC 2.6):** in the layout editor, with no layer selected, the "Fundo" section offers:
+  - **Cor:** 10 swatches.
+  - **Desfoque:** one track's video covering the canvas, blurred and slightly darkened, in sync with the layers. You pick the track; if it disappears or loses its video, the first video track is used.
+  - **Imagem:** a picture from the system photo picker (no storage permission). It is copied into the project folder upright, scaled down to at most 2048 px, as JPEG, so deleting the original does not affect the project. "Trocar imagem" replaces it and deletes the old copy.
+  - The color stays visible until the video or picture is ready, and is used if they are missing. Switching kind keeps the others' settings (back to Imagem shows the same picture).
+- **Compositor:**
+  - The blur draws the video into a 1/8-size framebuffer, runs 2 pairs of separable Gaussian passes and scales the result over the canvas.
+  - A video that is both a layer and the blur source uses one decoder.
+  - The picture is decoded off the render thread.
+  - The same code draws the recorder's canvas and the editor's.
+- Model: `CanvasSettings.background` (COLOR / BLUR / IMAGE), `backgroundTrackId`, `backgroundImage`. Older projects read as a color background. 2 new tests (blur source fallbacks, old JSON), 56 unit tests in total.
+- **Build fix:** incremental KSP once generated no Hilt code for `:feature:recorder` and `:feature:layout` after `:core:video` changed. The build passed but the app crashed opening a project ("Cannot create an instance of RecorderViewModel"). `gradle.properties` now has `ksp.incremental=false`.
+- On the phone, in a test project with 2 video tracks, all of these worked:
+  - color; blur of track 1 and track 2, following the playhead;
+  - picture picked from the gallery (a test screenshot I pushed and then deleted): upright, covering the canvas, saved in the project folder;
+  - in the recorder, the blurred background played at 30 fps with no new drops.
+
+### 3d checklist (owner)
+1. In a project with 2+ video tracks, open "Editar layout". Make room to see the background, e.g. shrink a layer (this turns the template into a free layout), or use 1:1 / 16:9 with a template that leaves empty spaces.
+2. Deselect all layers (tap an empty spot). The "Fundo" section appears below the hint.
+3. **Cor:** pick a few colors; the empty areas change.
+4. **Desfoque:** the empty areas show a blurred, darker version of track 1. Switch to Trilha 2. Move the playhead: the blur follows the video.
+5. **Imagem:** choose a photo. It appears upright and fills the canvas (cropped, not stretched). "Trocar imagem" swaps it.
+6. Go back to the recorder and play: the background shows there too and the videos stay smooth and in sync.
+7. Leave and reopen the project: the background is kept. Delete the original photo from the gallery: the project still shows it.
+
+### 3d known issues / notes
+- The test project "Teste3d" was left on the phone for the owner to delete.
+- The blur strength and darkening are fixed (no slider). Tell me if you want them adjustable.
+- With the image chosen, the Google Photos picker on this phone asks to confirm with "Concluir" even for a single photo. That is the system picker's behavior.
+- After 3d, Phase 3 is complete (once you confirm).

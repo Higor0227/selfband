@@ -49,11 +49,29 @@ data class Layer(
     val visible: Boolean = true,
 )
 
+/** What fills the canvas behind the layers (SPEC 2.6). */
+@Serializable
+enum class BackgroundKind {
+    /** [CanvasSettings.backgroundColor]. */
+    COLOR,
+    /** One track's video, covering the canvas, blurred ([CanvasSettings.backgroundTrackId]). */
+    BLUR,
+    /** A picture stored in the project directory ([CanvasSettings.backgroundImage]). */
+    IMAGE,
+}
+
 /** Canvas of a project: background, layout template and layers (SPEC 2.6, 3.6). */
 @Serializable
 data class CanvasSettings(
-    /** Solid background color, ARGB. */
+    /**
+     * Solid background color, ARGB. Also shown when the blur track or the image is missing.
+     */
     val backgroundColor: Long = 0xFF000000,
+    val background: BackgroundKind = BackgroundKind.COLOR,
+    /** Track whose video is blurred for [BackgroundKind.BLUR]; null = the first video track. */
+    val backgroundTrackId: String? = null,
+    /** File name of the picture inside the project directory, for [BackgroundKind.IMAGE]. */
+    val backgroundImage: String? = null,
     /**
      * Template that places the layers ([LayoutTemplates.AUTO], a built-in id), or null for a
      * free layout where each stored layer keeps its own frame (layer editing, 3c).

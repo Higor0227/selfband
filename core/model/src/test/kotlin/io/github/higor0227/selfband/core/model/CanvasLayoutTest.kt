@@ -183,4 +183,34 @@ class CanvasLayoutTest {
         val back = json.decodeFromString(CanvasSettings.serializer(), json.encodeToString(CanvasSettings.serializer(), canvas))
         assertNull(back.templateId)
     }
+
+    @Test
+    fun blurSourceFallsBackToTheFirstVideoTrack() {
+        val chosen = project(3, CanvasSettings(background = BackgroundKind.BLUR, backgroundTrackId = "t2"))
+        assertEquals("t2", CanvasLayout.blurSource(chosen)?.id)
+        // Unknown (deleted) track or none chosen: the first video track.
+        val gone = chosen.copy(canvas = chosen.canvas.copy(backgroundTrackId = "nope"))
+        assertEquals("t1", CanvasLayout.blurSource(gone)?.id)
+        // The chosen track lost its video (an audio-only take is active): the first video track.
+        val audioOnly = chosen.copy(
+            tracks = chosen.tracks.map { t ->
+                if (t.id == "t2") t.copy(takes = t.takes.map { it.copy(video = null) }) else t
+            },
+        )
+        assertEquals("t1", CanvasLayout.blurSource(audioOnly)?.id)
+        // Not a blur background, or no video at all: nothing.
+        assertNull(CanvasLayout.blurSource(project(2)))
+        assertNull(CanvasLayout.blurSource(project(0, CanvasSettings(background = BackgroundKind.BLUR))))
+    }
+
+    @Test
+    fun oldProjectsReadWithAColorBackground() {
+        val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+        val old = """{"backgroundColor":4278190080,"templateId":"auto","layers":[]}"""
+        val canvas = json.decodeFromString(CanvasSettings.serializer(), old)
+        assertEquals(BackgroundKind.COLOR, canvas.background)
+        assertNull(canvas.backgroundImage)
+        val image = CanvasSettings(background = BackgroundKind.IMAGE, backgroundImage = "bg.jpg")
+        assertEquals(image, json.decodeFromString(CanvasSettings.serializer(), json.encodeToString(CanvasSettings.serializer(), image)))
+    }
 }

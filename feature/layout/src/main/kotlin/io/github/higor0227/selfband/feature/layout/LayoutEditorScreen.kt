@@ -4,6 +4,9 @@ package io.github.higor0227.selfband.feature.layout
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -61,6 +64,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.higor0227.selfband.core.model.BackgroundKind
+import io.github.higor0227.selfband.core.model.CanvasLayout
 import io.github.higor0227.selfband.core.model.Layer
 import io.github.higor0227.selfband.core.model.LayerEditing
 import io.github.higor0227.selfband.core.video.CanvasPreview
@@ -311,6 +316,7 @@ private fun Controls(state: LayoutUiState, vm: LayoutEditorViewModel) {
         val sel = state.selected
         if (sel == null) {
             Text(stringResource(R.string.layout_hint_select), style = MaterialTheme.typography.bodyMedium)
+            BackgroundControls(state, vm)
         } else {
             SelectedLayerControls(sel, state, vm)
         }
@@ -374,18 +380,97 @@ private fun SelectedLayerControls(sel: Layer, state: LayoutUiState, vm: LayoutEd
         Text(stringResource(R.string.layout_border_color), style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             BORDER_COLORS.forEach { argb ->
-                val selected = sel.borderColor == argb
-                Box(
-                    Modifier.size(32.dp)
-                        .border(if (selected) 3.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape)
-                        .padding(4.dp)
-                        .background(Color(argb.toInt()), CircleShape)
-                        .clickable { vm.editSelected { it.copy(borderColor = argb) } },
-                )
+                Swatch(argb, sel.borderColor == argb) { vm.editSelected { it.copy(borderColor = argb) } }
             }
         }
     }
     Spacer(Modifier.height(16.dp))
+}
+
+/** Canvas background (SPEC 2.6): solid color, blur of a track's video, or a picture. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BackgroundControls(state: LayoutUiState, vm: LayoutEditorViewModel) {
+    val project = state.project ?: return
+    val canvas = state.canvas ?: return
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let(vm::importBackgroundImage)
+    }
+    fun launchPicker() = pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+
+    Text(stringResource(R.string.layout_background), style = MaterialTheme.typography.titleSmall)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FilterChip(
+            selected = canvas.background == BackgroundKind.COLOR,
+            onClick = { vm.setBackground(BackgroundKind.COLOR) },
+            label = { Text(stringResource(R.string.bg_color)) },
+        )
+        FilterChip(
+            selected = canvas.background == BackgroundKind.BLUR,
+            onClick = { vm.setBackground(BackgroundKind.BLUR) },
+            label = { Text(stringResource(R.string.bg_blur)) },
+        )
+        FilterChip(
+            selected = canvas.background == BackgroundKind.IMAGE,
+            onClick = { if (canvas.backgroundImage == null) launchPicker() else vm.setBackground(BackgroundKind.IMAGE) },
+            label = { Text(stringResource(R.string.bg_image)) },
+        )
+    }
+    when (canvas.background) {
+        BackgroundKind.COLOR -> Unit
+        BackgroundKind.BLUR -> {
+            Text(stringResource(R.string.bg_blur_track), style = MaterialTheme.typography.labelLarge)
+            val source = CanvasLayout.blurSource(project.copy(canvas = canvas))?.id
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                project.tracks.withIndex().filter { it.value.activeTake?.video != null }.forEach { (i, track) ->
+                    FilterChip(
+                        selected = source == track.id,
+                        onClick = { vm.setBlurTrack(track.id) },
+                        label = { Text(stringResource(R.string.layout_track_n, i + 1)) },
+                    )
+                }
+            }
+        }
+        BackgroundKind.IMAGE -> {
+            OutlinedButton(onClick = ::launchPicker, enabled = !state.importingImage) {
+                Text(stringResource(if (canvas.backgroundImage == null) R.string.bg_pick_image else R.string.bg_change_image))
+            }
+        }
+    }
+    if (state.importingImage) {
+        Text(stringResource(R.string.bg_importing), style = MaterialTheme.typography.bodySmall)
+    } else if (state.imageImportFailed) {
+        Text(
+            stringResource(R.string.bg_import_failed),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    Text(
+        stringResource(if (canvas.background == BackgroundKind.COLOR) R.string.bg_color else R.string.bg_fallback_color),
+        style = MaterialTheme.typography.labelLarge,
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        BACKGROUND_COLORS.forEach { argb ->
+            Swatch(argb, canvas.backgroundColor == argb) { vm.setBackgroundColor(argb) }
+        }
+    }
+    Spacer(Modifier.height(16.dp))
+}
+
+@Composable
+private fun Swatch(argb: Long, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(32.dp)
+            .border(
+                if (selected) 3.dp else 1.dp,
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                CircleShape,
+            )
+            .padding(4.dp)
+            .background(Color(argb.toInt()), CircleShape)
+            .clickable(onClick = onClick),
+    )
 }
 
 @Composable
@@ -417,6 +502,11 @@ private const val MAX_BORDER = 0.03f
 
 private val BORDER_COLORS = listOf(
     0xFFFFFFFF, 0xFF000000, 0xFFE53935, 0xFFFDD835, 0xFF43A047, 0xFF1E88E5, 0xFF8E24AA, 0xFFFF6F00,
+)
+
+private val BACKGROUND_COLORS = listOf(
+    0xFF000000, 0xFF212121, 0xFF616161, 0xFFFFFFFF, 0xFFF3EBDD,
+    0xFF0D47A1, 0xFF1B5E20, 0xFF4A148C, 0xFFB71C1C, 0xFFE65100,
 )
 
 /** m:ss.mmm */

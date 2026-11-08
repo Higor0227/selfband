@@ -39,6 +39,7 @@ internal class GlCanvasPreview : CanvasPreview {
     // Render thread only from here on.
     private lateinit var egl: EglCore
     private lateinit var program: LayerProgram
+    private lateinit var background: BackgroundRenderer
     private var ready = false
     private var window: EGLSurface? = null
     private var width = 0
@@ -52,6 +53,7 @@ internal class GlCanvasPreview : CanvasPreview {
     private var lastFrameNanos = 0L
     private var vsyncNanos = DEFAULT_VSYNC_NANOS
     private val params = LayerProgram.Params()
+    private val canvasFrame = FloatArray(4)
     private val frameCallback = Choreographer.FrameCallback { onVsync(it) }
 
     private class LayerState(
@@ -61,6 +63,8 @@ internal class GlCanvasPreview : CanvasPreview {
         val surfaceTexture: SurfaceTexture,
         val surface: Surface,
         val decoder: LayerDecoder?,
+        /** False for the video that only feeds the blurred background. */
+        var drawn: Boolean,
     ) {
         val frameAvailable = AtomicBoolean(false)
         var hasFrame = false
@@ -74,6 +78,7 @@ internal class GlCanvasPreview : CanvasPreview {
             try {
                 egl = EglCore()
                 program = LayerProgram()
+                background = BackgroundRenderer(handler)
                 ready = true
             } catch (e: Exception) {
                 Log.e(LOG_TAG, "canvas: GL init failed", e)
@@ -118,7 +123,10 @@ internal class GlCanvasPreview : CanvasPreview {
     override fun setScene(scene: CanvasScene) {
         handler.post {
             this.scene = scene
-            if (ready && !paused) syncLayers(scene)
+            if (ready) {
+                if (!paused) syncLayers(scene)
+                background.setImage(scene.image) { dirty = true }
+            }
             dirty = true
         }
     }
@@ -153,6 +161,7 @@ internal class GlCanvasPreview : CanvasPreview {
             layers.forEach { it.release() }
             layers.clear()
             if (ready) {
+                background.release()
                 program.release()
                 egl.release()
                 ready = false
@@ -161,9 +170,14 @@ internal class GlCanvasPreview : CanvasPreview {
         }
     }
 
-    /** Keeps decoders of files still in the scene; starts new ones; frees the rest. */
+    /**
+     * Keeps decoders of files still in the scene (layers and blurred background); starts new
+     * ones; frees the rest. A video both drawn and blurred has one decoder.
+     */
     private fun syncLayers(scene: CanvasScene) {
-        val wanted = scene.layers.associateBy { it.file.absolutePath }
+        val drawn = scene.layers.associateBy { it.file.absolutePath }
+        val wanted = LinkedHashMap(drawn)
+        scene.blur?.let { wanted.putIfAbsent(it.file.absolutePath, it) }
         val iterator = layers.iterator()
         while (iterator.hasNext()) {
             val state = iterator.next()
@@ -173,11 +187,11 @@ internal class GlCanvasPreview : CanvasPreview {
                 iterator.remove()
             } else {
                 state.scene = next
+                state.drawn = state.key in drawn
             }
         }
         val existing = layers.map { it.key }.toSet()
-        for (layer in scene.layers) {
-            val key = layer.file.absolutePath
+        for ((key, layer) in wanted) {
             if (key in existing) continue
             val texture = LayerProgram.createExternalTexture()
             val surfaceTexture = SurfaceTexture(texture)
@@ -188,7 +202,7 @@ internal class GlCanvasPreview : CanvasPreview {
                 Log.w(LOG_TAG, "canvas: missing video ${layer.file.name}")
                 null
             }
-            val state = LayerState(key, layer, texture, surfaceTexture, surface, decoder)
+            val state = LayerState(key, layer, texture, surfaceTexture, surface, decoder, drawn = key in drawn)
             surfaceTexture.setOnFrameAvailableListener({ state.frameAvailable.set(true) }, handler)
             layers += state
         }
@@ -303,6 +317,11 @@ internal class GlCanvasPreview : CanvasPreview {
             ((bg shr 16) and 0xFF) / 255f, ((bg shr 8) and 0xFF) / 255f, (bg and 0xFF) / 255f, 1f,
         )
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        canvasFrame[0] = cx / width
+        canvasFrame[1] = cy / height
+        canvasFrame[2] = cw / width
+        canvasFrame[3] = ch / height
+        drawBackground(scene, cw, ch, aspect)
 
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
@@ -310,7 +329,7 @@ internal class GlCanvasPreview : CanvasPreview {
         for (i in layers.indices) {
             val state = layers[i]
             val layer = state.scene.layer
-            if (!layer.visible || layer.opacity <= 0f) continue
+            if (!state.drawn || !layer.visible || layer.opacity <= 0f) continue
             val p = params
             val f = layer.frame
             p.frame[0] = (cx + f.x * cw) / width
@@ -341,6 +360,29 @@ internal class GlCanvasPreview : CanvasPreview {
         }
         GLES30.glDisable(GLES30.GL_BLEND)
         GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
+    }
+
+    /** Blurred video or picture over the background color, if any is ready. */
+    private fun drawBackground(scene: CanvasScene, cw: Float, ch: Float, aspect: Float) {
+        val blur = scene.blur
+        if (blur != null) {
+            val key = blur.file.absolutePath
+            var state: LayerState? = null
+            for (i in layers.indices) if (layers[i].key == key) state = layers[i]
+            if (state == null || !state.hasFrame) return
+            val p = params
+            p.crop[0] = blur.layer.crop.x
+            p.crop[1] = blur.layer.crop.y
+            p.crop[2] = blur.layer.crop.width
+            p.crop[3] = blur.layer.crop.height
+            p.quarterTurns = ((blur.rotationDegrees / 90) % 4 + 4) % 4
+            p.hasTexture = true
+            p.texture = state.texture
+            System.arraycopy(state.texMatrix, 0, p.texMatrix, 0, 16)
+            background.drawBlur(program, p, cw, ch, canvasFrame, width, height)
+        } else if (scene.image != null) {
+            background.drawImage(canvasFrame, aspect)
+        }
     }
 
     private companion object {

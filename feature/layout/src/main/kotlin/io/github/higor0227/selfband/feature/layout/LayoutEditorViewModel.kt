@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.feature.layout
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.higor0227.selfband.core.model.BackgroundKind
 import io.github.higor0227.selfband.core.model.CanvasLayout
 import io.github.higor0227.selfband.core.model.CanvasSettings
 import io.github.higor0227.selfband.core.model.Layer
@@ -18,7 +22,9 @@ import io.github.higor0227.selfband.core.project.ProjectRepository
 import io.github.higor0227.selfband.core.video.CanvasPreview
 import io.github.higor0227.selfband.core.video.CanvasPreviewFactory
 import io.github.higor0227.selfband.core.video.CanvasScenes
+import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +37,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 enum class EditMode { MOVE, CROP }
 
@@ -54,6 +61,8 @@ data class LayoutUiState(
     val snap: Boolean = true,
     val guides: List<LayerEditing.Guide> = emptyList(),
     val playheadFrames: Long = 0,
+    val importingImage: Boolean = false,
+    val imageImportFailed: Boolean = false,
 ) {
     val selected: Layer? get() = layers.firstOrNull { it.trackId == selectedTrackId }
     val canvasAspect: Float get() = project?.aspectRatio?.value ?: (9f / 16f)
@@ -66,6 +75,8 @@ private data class Local(
     val snap: Boolean = true,
     val guides: List<LayerEditing.Guide> = emptyList(),
     val playheadFrames: Long = 0,
+    val importingImage: Boolean = false,
+    val imageImportFailed: Boolean = false,
 )
 
 /**
@@ -76,6 +87,7 @@ private data class Local(
 @HiltViewModel
 class LayoutEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
+    @ApplicationContext private val context: Context,
     private val repository: ProjectRepository,
     canvasFactory: CanvasPreviewFactory,
 ) : ViewModel() {
@@ -101,6 +113,8 @@ class LayoutEditorViewModel @Inject constructor(
             snap = l.snap,
             guides = l.guides,
             playheadFrames = l.playheadFrames,
+            importingImage = l.importingImage,
+            imageImportFailed = l.imageImportFailed,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, LayoutUiState())
 
@@ -111,7 +125,12 @@ class LayoutEditorViewModel @Inject constructor(
         canvasPreview.setPosition { playhead.toDouble() }
         viewModelScope.launch {
             combine(repository.observe(projectId).filterNotNull(), local.map { it.draft }.distinctUntilChanged()) { p, draft ->
-                CanvasScenes.build(p, { trackId, name -> repository.takeAudioFile(p.id, trackId, name) }, draft ?: p.canvas)
+                CanvasScenes.build(
+                    p,
+                    { trackId, name -> repository.takeAudioFile(p.id, trackId, name) },
+                    { name -> repository.projectMediaFile(p.id, name) },
+                    draft ?: p.canvas,
+                )
             }.distinctUntilChanged().collect { canvasPreview.setScene(it) }
         }
     }
@@ -274,6 +293,42 @@ class LayoutEditorViewModel @Inject constructor(
         val draft = local.value.draft ?: return
         val order = state.project?.tracks?.map { it.id }.orEmpty()
         local.update { it.copy(draft = LayerEditing.restack(draft, id, up, order)) }
+        commit()
+    }
+
+    // --- background (SPEC 2.6) ------------------------------------------------------------
+
+    fun setBackground(kind: BackgroundKind) = editCanvas { it.copy(background = kind) }
+
+    fun setBackgroundColor(argb: Long) = editCanvas { it.copy(backgroundColor = argb) }
+
+    fun setBlurTrack(trackId: String) = editCanvas { it.copy(background = BackgroundKind.BLUR, backgroundTrackId = trackId) }
+
+    /** Copies the picked picture into the project and shows it as the background. */
+    fun importBackgroundImage(uri: Uri) {
+        val project = uiState.value.project ?: return
+        if (local.value.importingImage) return
+        local.update { it.copy(importingImage = true, imageImportFailed = false) }
+        viewModelScope.launch {
+            val name = "background-${UUID.randomUUID()}.jpg"
+            val ok = withContext(Dispatchers.IO) {
+                BackgroundImages.import(context, uri, repository.projectMediaFile(project.id, name))
+            }
+            if (ok) {
+                val old = (local.value.draft ?: project.canvas).backgroundImage
+                editCanvas { it.copy(background = BackgroundKind.IMAGE, backgroundImage = name) }
+                if (old != null && old != name) {
+                    withContext(Dispatchers.IO) { repository.projectMediaFile(project.id, old).delete() }
+                }
+            }
+            local.update { it.copy(importingImage = false, imageImportFailed = !ok) }
+        }
+    }
+
+    /** Canvas-wide change: keeps the layout (no template freeze) and saves. */
+    private fun editCanvas(transform: (CanvasSettings) -> CanvasSettings) {
+        val project = uiState.value.project ?: return
+        local.update { it.copy(draft = transform(it.draft ?: project.canvas)) }
         commit()
     }
 

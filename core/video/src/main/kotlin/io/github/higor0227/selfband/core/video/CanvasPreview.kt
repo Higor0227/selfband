@@ -20,13 +20,20 @@ data class SceneLayer(
     val layer: Layer,
 )
 
-/** What the canvas shows (SPEC 2.6). [layers] are bottom to top. */
+/**
+ * What the canvas shows (SPEC 2.6). [layers] are bottom to top. The background is
+ * [backgroundColor], covered by [blur] (a video drawn over the whole canvas and blurred) or
+ * [image] (a picture covering the canvas) when set.
+ */
 data class CanvasScene(
     val aspectRatio: AspectRatio,
     val sampleRate: Int,
     /** ARGB. */
     val backgroundColor: Long,
     val layers: List<SceneLayer>,
+    /** Its layer's crop covers the canvas; frame, corners, border and opacity are ignored. */
+    val blur: SceneLayer? = null,
+    val image: File? = null,
 )
 
 /** Project position (frames) shown at CLOCK_MONOTONIC time `timeNanos`. */

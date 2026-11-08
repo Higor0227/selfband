@@ -336,7 +336,7 @@ class RecorderViewModel @Inject constructor(
     }
 
     private fun sceneOf(project: Project): CanvasScene =
-        CanvasScenes.build(project, { trackId, name -> repository.takeAudioFile(project.id, trackId, name) })
+        CanvasScenes.build(project, { trackId, name -> repository.takeAudioFile(project.id, trackId, name) }, { name -> repository.projectMediaFile(project.id, name) })
 
     // --- camera (SPEC 2.2, 3.4) ----------------------------------------------------------
 
