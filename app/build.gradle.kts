@@ -35,6 +35,7 @@ dependencies {
     implementation(project(":feature:projects"))
     implementation(project(":feature:layout"))
     implementation(project(":feature:recorder"))
+    implementation(project(":feature:export"))
     implementation(project(":feature:settings"))
 
     implementation(libs.androidx.core.ktx)

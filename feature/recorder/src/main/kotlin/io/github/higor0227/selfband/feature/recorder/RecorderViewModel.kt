@@ -16,7 +16,7 @@ import io.github.higor0227.selfband.core.audio.AudioRouting
 import io.github.higor0227.selfband.core.audio.EngineConfig
 import io.github.higor0227.selfband.core.audio.EngineOpenResult
 import io.github.higor0227.selfband.core.audio.EngineStatus
-import io.github.higor0227.selfband.core.audio.PlaybackTrack
+import io.github.higor0227.selfband.core.audio.PlaybackTracks
 import io.github.higor0227.selfband.core.audio.RecordChannelMode
 import io.github.higor0227.selfband.core.audio.RecordingResult
 import io.github.higor0227.selfband.core.audio.TakeAudio
@@ -1093,21 +1093,10 @@ class RecorderViewModel @Inject constructor(
     }
 
     private suspend fun loadTracks(project: Project) {
-        val playable = project.tracks.filter { (it.activeTake?.lengthFrames ?: 0) > 0 }
-        engineTrackIds = playable.map { it.id }
-        val anySolo = Mixing.anySolo(project)
-        engine.setTracks(
-            playable.map { track ->
-                val take = track.activeTake!!
-                PlaybackTrack(
-                    file = repository.takeAudioFile(project.id, track.id, take.audioFile),
-                    startFrame = take.startFrame,
-                    gain = Mixing.trackGain(track, anySolo),
-                    eq = track.eq,
-                    send = Mixing.sendGain(track),
-                )
-            },
-        )
+        // Same mapping as the export render, so what plays is what exports.
+        val playable = PlaybackTracks.of(project) { trackId, name -> repository.takeAudioFile(project.id, trackId, name) }
+        engineTrackIds = playable.map { it.first }
+        engine.setTracks(playable.map { it.second })
         engine.setReverb(project.mixer.reverb)
         engine.setMaster(Mixing.masterGain(project.mixer), project.mixer.limiter)
         local.update { it.copy(freeBytes = repository.freeBytes(), engineTrackIds = engineTrackIds) }

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <resources>
+    <string name="export_action">Exportar</string>
     <string name="back">Voltar</string>
     <string name="mic_permission_needed">O Selfband precisa da permissão de microfone para gravar.</string>
     <string name="engine_error">Não foi possível iniciar o áudio: %1$s</string>

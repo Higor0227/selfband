@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <string name="export_channel">Exports</string>
+    <string name="export_running_title">Exporting %1$s</string>
+    <string name="export_step_mix">Rendering the mix…</string>
+    <string name="export_step_stems">Rendering stems (track %1$d of %2$d)…</string>
+    <string name="export_cancel">Cancel</string>
+    <string name="export_done_title">Export finished</string>
+    <string name="export_done_text">%1$s: %2$d file(s) saved</string>
+    <string name="export_failed_title">Export failed</string>
+    <string name="export_cancelled_title">Export cancelled</string>
+    <!-- File names (no extension) -->
+    <string name="export_mix_file">%1$s - mix</string>
+    <string name="export_stem_file">%1$s - track %2$02d</string>
+</resources>

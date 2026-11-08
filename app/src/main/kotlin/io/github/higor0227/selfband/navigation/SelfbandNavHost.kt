@@ -7,6 +7,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import io.github.higor0227.selfband.feature.export.ExportRoute
+import io.github.higor0227.selfband.feature.export.ExportViewModel
 import io.github.higor0227.selfband.feature.layout.LayoutEditorViewModel
 import io.github.higor0227.selfband.feature.layout.LayoutRoute
 import io.github.higor0227.selfband.feature.projects.ProjectsRoute
@@ -22,10 +24,12 @@ private object Routes {
     const val PROJECTS = "projects"
     const val RECORDER = "recorder/{${RecorderViewModel.ARG_PROJECT_ID}}"
     const val LAYOUT = "layout/{${LayoutEditorViewModel.ARG_PROJECT_ID}}"
+    const val EXPORT = "export/{${ExportViewModel.ARG_PROJECT_ID}}"
     const val AUDIO_DIAGNOSTICS = "settings/audio-diagnostics"
 
     fun recorder(projectId: String) = "recorder/$projectId"
     fun layout(projectId: String) = "layout/$projectId"
+    fun export(projectId: String) = "export/$projectId"
 }
 
 @Composable
@@ -45,6 +49,7 @@ fun SelfbandNavHost() {
             RecorderRoute(
                 onBack = { navController.popBackStack() },
                 onOpenLayout = { id -> navController.navigate(Routes.layout(id)) },
+                onOpenExport = { id -> navController.navigate(Routes.export(id)) },
             )
         }
         composable(
@@ -52,6 +57,12 @@ fun SelfbandNavHost() {
             arguments = listOf(navArgument(LayoutEditorViewModel.ARG_PROJECT_ID) { type = NavType.StringType }),
         ) {
             LayoutRoute(onBack = { navController.popBackStack() })
+        }
+        composable(
+            Routes.EXPORT,
+            arguments = listOf(navArgument(ExportViewModel.ARG_PROJECT_ID) { type = NavType.StringType }),
+        ) {
+            ExportRoute(onBack = { navController.popBackStack() })
         }
         composable(Routes.AUDIO_DIAGNOSTICS) {
             DiagnosticsRoute(onBack = { navController.popBackStack() })

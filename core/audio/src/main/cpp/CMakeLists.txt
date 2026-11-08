@@ -8,7 +8,9 @@ add_library(selfband_audio SHARED
         jni_bridge.cpp
         jni_engine.cpp
         probe/AudioProbe.cpp
+        jni_offline.cpp
         engine/AudioEngine.cpp
+        engine/OfflineMixer.cpp
         engine/WavFile.cpp
 )
 

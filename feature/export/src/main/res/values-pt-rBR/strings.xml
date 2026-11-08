@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <string name="back">Voltar</string>
+    <string name="export_title">Exportar</string>
+    <string name="export_range">Trecho: %1$s → %2$s (%3$s)</string>
+    <string name="export_range_trimmed">cortado na linha do tempo</string>
+    <string name="export_audio">Áudio</string>
+    <string name="export_mix_wav">Mix (WAV)</string>
+    <string name="export_mix_wav_hint">O mix estéreo exatamente como você ouve, com mixer, EQ, reverb e limitador. O metrônomo nunca é exportado.</string>
+    <string name="export_stems">Stems (WAV)</string>
+    <string name="export_stems_hint">Um arquivo por trilha, seco (como gravado) e já alinhado, todos com o mesmo início e duração: é só soltar numa DAW.</string>
+    <string name="export_format">Formato</string>
+    <string name="export_24bit">24-bit</string>
+    <string name="export_32float">32-bit float</string>
+    <string name="export_destination">Salvo em %1$s</string>
+    <string name="export_start">Exportar</string>
+    <string name="export_nothing">Ainda não há nada gravado para exportar.</string>
+    <string name="export_running_mix">Renderizando o mix…</string>
+    <string name="export_running_stems">Renderizando stems (trilha %1$d de %2$d)…</string>
+    <string name="export_cancel">Cancelar</string>
+    <string name="export_done">Pronto: %1$d arquivo(s) em %2$s</string>
+    <string name="export_share">Compartilhar</string>
+    <string name="export_again">Nova exportação</string>
+    <string name="export_failed_empty">Nada para exportar: não há áudio gravado no trecho.</string>
+    <string name="export_failed_take">Não foi possível ler uma gravação. Algum arquivo foi apagado?</string>
+    <string name="export_failed_write">Não foi possível salvar o arquivo (o armazenamento está cheio?).</string>
+    <string name="export_cancelled">Exportação cancelada. Nada foi salvo.</string>
+    <string name="export_other_project">Outro projeto está sendo exportado.</string>
+    <string name="export_background_hint">Você pode sair desta tela: a exportação continua em segundo plano, com uma notificação.</string>
+</resources>

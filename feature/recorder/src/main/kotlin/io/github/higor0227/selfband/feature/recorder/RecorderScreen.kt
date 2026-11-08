@@ -83,6 +83,7 @@ import java.util.Locale
 fun RecorderRoute(
     onBack: () -> Unit,
     onOpenLayout: (projectId: String) -> Unit,
+    onOpenExport: (projectId: String) -> Unit,
     viewModel: RecorderViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -115,6 +116,7 @@ fun RecorderRoute(
         state = state,
         permissionGranted = granted,
         onBack = onBack,
+        onExport = { onOpenExport(viewModel.projectId) },
         onTogglePlay = viewModel::togglePlay,
         onRecord = viewModel::recordNewTrack,
         onStop = viewModel::stop,
@@ -205,6 +207,7 @@ fun RecorderScreen(
     state: RecorderUiState,
     permissionGranted: Boolean,
     onBack: () -> Unit,
+    onExport: () -> Unit,
     onTogglePlay: () -> Unit,
     onRecord: (Int) -> Unit,
     onStop: () -> Unit,
@@ -259,6 +262,13 @@ fun RecorderScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
                     }
+                },
+                actions = {
+                    // Export renders from the saved takes; only while the transport is stopped.
+                    TextButton(
+                        onClick = onExport,
+                        enabled = state.transport == TransportState.IDLE && (state.project?.lengthFrames ?: 0L) > 0L,
+                    ) { Text(stringResource(R.string.export_action)) }
                 },
             )
         },

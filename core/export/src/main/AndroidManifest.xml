@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Exports run in a foreground service with a progress notification (SPEC 2.7, 3.7). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <!-- mediaProcessing on Android 15+, dataSync before (SPEC 3.7). -->
+        <service
+            android:name=".ExportService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|mediaProcessing" />
+    </application>
+</manifest>

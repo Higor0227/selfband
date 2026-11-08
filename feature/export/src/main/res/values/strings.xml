@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <string name="back">Back</string>
+    <string name="export_title">Export</string>
+    <string name="export_range">Range: %1$s → %2$s (%3$s)</string>
+    <string name="export_range_trimmed">trimmed in the timeline</string>
+    <string name="export_audio">Audio</string>
+    <string name="export_mix_wav">Mix (WAV)</string>
+    <string name="export_mix_wav_hint">The stereo mix exactly as you hear it, with the mixer, EQ, reverb and limiter. The metronome is never exported.</string>
+    <string name="export_stems">Stems (WAV)</string>
+    <string name="export_stems_hint">One file per track, dry (as recorded) and already aligned, all with the same start and length: drop them into a DAW.</string>
+    <string name="export_format">Format</string>
+    <string name="export_24bit">24-bit</string>
+    <string name="export_32float">32-bit float</string>
+    <string name="export_destination">Saved to %1$s</string>
+    <string name="export_start">Export</string>
+    <string name="export_nothing">Nothing recorded to export yet.</string>
+    <string name="export_running_mix">Rendering the mix…</string>
+    <string name="export_running_stems">Rendering stems (track %1$d of %2$d)…</string>
+    <string name="export_cancel">Cancel</string>
+    <string name="export_done">Done: %1$d file(s) in %2$s</string>
+    <string name="export_share">Share</string>
+    <string name="export_again">New export</string>
+    <string name="export_failed_empty">Nothing to export: no recorded audio in the range.</string>
+    <string name="export_failed_take">A take could not be read. Was a file deleted?</string>
+    <string name="export_failed_write">The file could not be saved (is the storage full?).</string>
+    <string name="export_cancelled">Export cancelled. Nothing was saved.</string>
+    <string name="export_other_project">Another project is being exported.</string>
+    <string name="export_background_hint">You can leave this screen: the export continues in the background, with a notification.</string>
+</resources>

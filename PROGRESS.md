@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 4 — Basic mixing (complete; Phase 5 next)
+## Current phase: Phase 5 — Export (5a confirmed; 5b in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -555,3 +555,52 @@ Use a project with 2+ tracks; ideally one recorded with a loud clap at the start
 - Pinch-to-zoom is not supported; use the + / − buttons.
 - The playback stop at the trim end is checked every ~50 ms (status rate), so preview may run a few ms past the end. The export will cut exactly.
 - Phase 4 is complete.
+
+## Phase 5 — Export
+
+### 5a — Audio export: mix + stems (confirmed by the owner on 2026-11-08)
+- **Shared mix graph:** the live engine and the offline renderer now use the same code (`engine/MixGraph.h`).
+  - Per track: EQ → volume/pan/phase → master, plus the reverb send.
+  - Master: reverb return → master volume → limiter.
+  - The metronome is only in the live engine and is never exported.
+  - `AudioEngine` was refactored onto it, with no change in sound.
+- **Offline renderer:** `OfflineMixer` (C++) and `OfflineMix` (Kotlin, JNI) render blocks of 4096 frames at any position, faster than real time.
+  - The mix is stereo.
+  - Each stem keeps its own channel count and is dry: only the take, aligned, without volume/pan/EQ/reverb.
+  - `PlaybackTracks.of` gives playback and export the same track list (active takes, offsets, mute/solo).
+- **Range:** the global trim (or the whole project). All files start at the trim start and have exactly the same length, so stems drop into a DAW in sync. The reverb tail is cut at the trim end.
+- **Files:** WAV 24-bit PCM (default) or 32-bit float, at the project sample rate.
+  - They are saved in `Music/Selfband/<project>/` as "<project> - mix.wav" and "<project> - trilha 01.wav", numbered by track position. Android does not accept audio under Movies, so the video (5b) will go to `Movies/Selfband/`.
+  - Files are written straight into MediaStore as hidden (pending) items and only appear when complete. They are deleted on cancel or error.
+- **Background:** `ExportService` is a foreground service with a progress notification and a **Cancelar** action. Its type is mediaProcessing on Android 15+, dataSync before that.
+  - The export keeps running if the app goes to the background or the screen turns off.
+  - Notifications are requested on the first export (Android 13+). Exporting works without them.
+- **Screen:** recorder top bar → **Exportar**, which is enabled when the transport is stopped and the project has audio.
+  - Options: Mix (WAV) and Stems (WAV) checkboxes, 24-bit / 32-bit float, destination.
+  - While running: progress, step (mix / stem n of m) and Cancel.
+  - When done: the file list, **Compartilhar** (system share sheet with all files) and **Nova exportação**.
+- **Modules:** new `:core:export` (manager, service, WAV writer, MediaStore) and `:feature:export` (screen). Wired in `:app` navigation.
+- 3 new tests: 24-bit header/samples/clipping, float multi-block, file names. 77 unit tests in total.
+- **Fix after the first owner test:** exporting crashed on Android 17 with "Starting FGS with type none".
+  - Cause: `ServiceCompat.startForeground` masks the service type to the types known on API 34. That drops `mediaProcessing` (API 35) and passes no type at all.
+  - Fix: the service calls `Service.startForeground(id, notification, type)` directly (available since API 29 = minSdk).
+- Checked by me on the phone, project "Música 2" (3 tracks), mix + stems at 24-bit:
+  - 4 files in `Music/Selfband/Música 2/`, all 340 456 frames (7.093 s) at 48 kHz;
+  - mix stereo with peak −9.5 dBFS; stems mono, all with signal.
+
+### 5a checklist (owner)
+Use a project with 2+ tracks, some mixer settings (volume, pan, EQ, reverb) and a trim.
+1. In the recorder, tap **Exportar** (top right). The screen shows the range (trim), Mix/Stems options, format and "Salvo em Music/Selfband/<projeto>/".
+2. Leave **Mix** on, tap **Exportar**, and answer the notification prompt as you like. Progress runs; with notifications allowed, a notification with progress and Cancelar appears.
+3. When it ends, the file is listed. Tap **Compartilhar** and send it somewhere (or open it in a player). It should sound exactly like the preview of the trimmed range, without the metronome.
+4. Tap **Nova exportação**, turn on **Stems**, choose **32-bit float**, export. You get one file per track, plus the mix if still on.
+5. Load the stems into a DAW (or check the lengths in a file manager): all stems are the same length, start together and are in sync. They are dry: no volume, pan, EQ or reverb.
+6. Start a long export and press Home or turn the screen off: it keeps going and finishes. The notification says it's done.
+7. Start another export and tap **Cancelar** (on the screen or in the notification): it stops and no partial file is left in Music/Selfband.
+8. Check the folder in a file manager or music app: Music/Selfband/<projeto>/ contains the WAVs.
+
+### 5a known issues / notes
+- One export at a time. Exporting another project while one runs is blocked with a message.
+- Exporting a file with the same name again does not overwrite it: Android adds " (1)" etc.
+- The Exportar button is disabled while playing or recording.
+- Video export comes in 5b.

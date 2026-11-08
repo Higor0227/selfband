@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <resources>
+    <string name="export_action">Export</string>
     <string name="back">Back</string>
     <string name="mic_permission_needed">Selfband needs microphone permission to record.</string>
     <string name="engine_error">Could not start audio: %1$s</string>

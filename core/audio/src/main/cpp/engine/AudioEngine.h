@@ -11,9 +11,7 @@
 
 #include <oboe/Oboe.h>
 
-#include "engine/Equalizer.h"
-#include "engine/Limiter.h"
-#include "engine/Reverb.h"
+#include "engine/MixGraph.h"
 #include "engine/SpscRing.h"
 #include "engine/WavFile.h"
 
@@ -85,15 +83,6 @@ enum TransportState : int32_t { kIdle = 0, kPlaying = 1, kRecording = 2 };
 
 /** Which input channels go into a take. */
 enum RecordChannelMode : int32_t { kRecFirst = 0, kRecSecond = 1, kRecStereo = 2 };
-
-struct TrackConfig {
-    std::string path;
-    int64_t startFrame = 0; // project frame of the take's first sample
-    float gainL = 1.0f;     // volume, pan, mute, solo and phase already folded in
-    float gainR = 1.0f;
-    float eq[Equalizer::kParamCount] = {1, 0, 80, 120, 0, 1000, 0, 1, 8000, 0};
-    float send = 0.0f;      // reverb send (linear), taken after the track gains
-};
 
 /**
  * Full-duplex engine: one low-latency output stream drives the clock (data callback);
@@ -188,14 +177,8 @@ private:
         SpscRing ring;          // interleaved stereo, aligned to the project timeline
         int64_t startFrame = 0;
         int64_t producedPos = 0; // next project frame the reader will produce
-        std::atomic<float> targetL{1.0f};
-        std::atomic<float> targetR{1.0f};
-        float currentL = 1.0f; // audio thread only
-        float currentR = 1.0f; // audio thread only
+        TrackMix mix;            // EQ, gains, send (shared with the export render)
         std::atomic<float> peak{0.0f};
-        Equalizer eq;           // prepared in setTracks()/open()
-        std::atomic<float> sendTarget{0.0f};
-        float sendCurrent = 0.0f; // audio thread only
     };
 
     void mixMetronome(float *out, int32_t numFrames, int32_t outChannels, int64_t position);
@@ -285,12 +268,8 @@ private:
     std::thread mReaderThread;
     std::atomic<bool> mReaderRun{false};
 
-    // Master bus.
-    std::atomic<float> mMasterGainTarget{1.0f};
-    float mMasterGain = 1.0f;            // audio thread only
-    std::atomic<bool> mLimiterEnabled{true};
-    Limiter mLimiter;                    // audio thread only (prepared in open)
-    Reverb mReverb;                      // send bus; prepared in open
+    // Master bus (reverb return, volume, limiter), prepared in open.
+    MasterBus mMaster;
     std::atomic<float> mMasterPeakL{0.0f};
     std::atomic<float> mMasterPeakR{0.0f};
     std::atomic<float> mLimiterGain{1.0f};
