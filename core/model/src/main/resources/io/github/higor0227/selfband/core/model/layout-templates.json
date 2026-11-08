@@ -1,0 +1,90 @@
+{
+  "_comment": "SPDX-License-Identifier: GPL-3.0-or-later. Built-in canvas layout templates (SPEC 2.6). Slots are normalized to the canvas (x, y = top left). 'default' applies to formats without their own list. Tracks fill slots in track order.",
+  "version": 1,
+  "templates": [
+    {
+      "id": "t1",
+      "slots": {
+        "default": [
+          { "x": 0, "y": 0, "width": 1, "height": 1 }
+        ]
+      }
+    },
+    {
+      "id": "t2",
+      "slots": {
+        "default": [
+          { "x": 0, "y": 0, "width": 0.5, "height": 1 },
+          { "x": 0.5, "y": 0, "width": 0.5, "height": 1 }
+        ],
+        "PORTRAIT_9_16": [
+          { "x": 0, "y": 0, "width": 1, "height": 0.5 },
+          { "x": 0, "y": 0.5, "width": 1, "height": 0.5 }
+        ]
+      }
+    },
+    {
+      "id": "t3",
+      "slots": {
+        "default": [
+          { "x": 0, "y": 0, "width": 0.333333, "height": 1 },
+          { "x": 0.333333, "y": 0, "width": 0.333334, "height": 1 },
+          { "x": 0.666667, "y": 0, "width": 0.333333, "height": 1 }
+        ],
+        "PORTRAIT_9_16": [
+          { "x": 0, "y": 0, "width": 1, "height": 0.5 },
+          { "x": 0, "y": 0.5, "width": 0.5, "height": 0.5 },
+          { "x": 0.5, "y": 0.5, "width": 0.5, "height": 0.5 }
+        ]
+      }
+    },
+    {
+      "id": "t4",
+      "slots": {
+        "default": [
+          { "x": 0, "y": 0, "width": 0.5, "height": 0.5 },
+          { "x": 0.5, "y": 0, "width": 0.5, "height": 0.5 },
+          { "x": 0, "y": 0.5, "width": 0.5, "height": 0.5 },
+          { "x": 0.5, "y": 0.5, "width": 0.5, "height": 0.5 }
+        ]
+      }
+    },
+    {
+      "id": "t6",
+      "slots": {
+        "default": [
+          { "x": 0, "y": 0, "width": 0.333333, "height": 0.5 },
+          { "x": 0.333333, "y": 0, "width": 0.333334, "height": 0.5 },
+          { "x": 0.666667, "y": 0, "width": 0.333333, "height": 0.5 },
+          { "x": 0, "y": 0.5, "width": 0.333333, "height": 0.5 },
+          { "x": 0.333333, "y": 0.5, "width": 0.333334, "height": 0.5 },
+          { "x": 0.666667, "y": 0.5, "width": 0.333333, "height": 0.5 }
+        ],
+        "PORTRAIT_9_16": [
+          { "x": 0, "y": 0, "width": 0.5, "height": 0.333333 },
+          { "x": 0.5, "y": 0, "width": 0.5, "height": 0.333333 },
+          { "x": 0, "y": 0.333333, "width": 0.5, "height": 0.333334 },
+          { "x": 0.5, "y": 0.333333, "width": 0.5, "height": 0.333334 },
+          { "x": 0, "y": 0.666667, "width": 0.5, "height": 0.333333 },
+          { "x": 0.5, "y": 0.666667, "width": 0.5, "height": 0.333333 }
+        ]
+      }
+    },
+    {
+      "id": "t9",
+      "slots": {
+        "default": [
+          { "x": 0, "y": 0, "width": 0.333333, "height": 0.333333 },
+          { "x": 0.333333, "y": 0, "width": 0.333334, "height": 0.333333 },
+          { "x": 0.666667, "y": 0, "width": 0.333333, "height": 0.333333 },
+          { "x": 0, "y": 0.333333, "width": 0.333333, "height": 0.333334 },
+          { "x": 0.333333, "y": 0.333333, "width": 0.333334, "height": 0.333334 },
+          { "x": 0.666667, "y": 0.333333, "width": 0.333333, "height": 0.333334 },
+          { "x": 0, "y": 0.666667, "width": 0.333333, "height": 0.333333 },
+          { "x": 0.333333, "y": 0.666667, "width": 0.333334, "height": 0.333333 },
+          { "x": 0.666667, "y": 0.666667, "width": 0.333333, "height": 0.333333 }
+        ]
+      }
+    }
+  ]
+}

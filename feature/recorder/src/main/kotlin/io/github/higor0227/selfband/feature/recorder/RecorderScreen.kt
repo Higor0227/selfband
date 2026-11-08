@@ -162,6 +162,10 @@ fun RecorderRoute(onBack: () -> Unit, viewModel: RecorderViewModel = hiltViewMod
             onSetActiveTake = viewModel::setActiveTake,
             onDeleteTake = viewModel::deleteTake,
         ),
+        canvasActions = CanvasActions(
+            onAspectRatio = viewModel::setAspectRatio,
+            onTemplate = viewModel::setLayoutTemplate,
+        ),
     )
 }
 
@@ -187,6 +191,7 @@ fun RecorderScreen(
     video: VideoActions,
     cameraSettings: CameraSettingsActions,
     takes: TakeActions,
+    canvasActions: CanvasActions,
 ) {
     // Ghost opacity follows the slider live; it is saved when the slider is released.
     val savedOpacity = state.cameraSettings.ghostOpacity
@@ -284,7 +289,13 @@ fun RecorderScreen(
                     onRecord((view.display?.rotation ?: android.view.Surface.ROTATION_0) * 90)
                 }, onStop)
             }
-            item { CameraSettingsCard(state, ghostOpacity, settingsActions) }
+            item {
+                if (state.panelMode == PanelMode.CANVAS) {
+                    CanvasLayoutCard(state, canvasActions)
+                } else {
+                    CameraSettingsCard(state, ghostOpacity, settingsActions)
+                }
+            }
             state.project?.let { project ->
                 item { MetronomeCard(project.metronome, onUpdateMetronome, onTapTempo) }
             }
@@ -457,24 +468,18 @@ private fun TrackCard(
                     if (video == null) {
                         Text(stringResource(R.string.audio_only), style = MaterialTheme.typography.bodySmall)
                     } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                stringResource(
-                                    if (video.startPositionFrames == null) R.string.video_not_aligned else R.string.video_info,
-                                    stringResource(video.lens.labelRes()),
-                                    video.frameRate,
-                                ) + if (video.manualOffsetMs != 0.0) {
-                                    " · " + stringResource(R.string.video_offset_value, String.format(Locale.ROOT, "%+.1f", video.manualOffsetMs))
-                                } else "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (video.startPositionFrames == null) MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f, fill = false),
-                            )
-                            TextButton(onClick = onCheckSync, enabled = canEdit && video.startPositionFrames != null) {
-                                Text(stringResource(R.string.check_sync))
-                            }
-                        }
+                        Text(
+                            stringResource(
+                                if (video.startPositionFrames == null) R.string.video_not_aligned else R.string.video_info,
+                                stringResource(video.lens.labelRes()),
+                                video.frameRate,
+                            ) + if (video.manualOffsetMs != 0.0) {
+                                " · " + stringResource(R.string.video_offset_value, String.format(Locale.ROOT, "%+.1f", video.manualOffsetMs))
+                            } else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (video.startPositionFrames == null) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurface,
+                        )
                     }
                     if (take.alignment.xrunsDuringTake > 0 || take.alignment.droppedFrames > 0) {
                         Text(stringResource(R.string.take_glitched_short), color = MaterialTheme.colorScheme.error,
@@ -498,6 +503,12 @@ private fun TrackCard(
             if (track.takes.size > 1) {
                 TextButton(onClick = { takesDialog = true }, enabled = canEdit) {
                     Text(stringResource(R.string.takes_button, track.takes.size))
+                }
+            }
+            val video = take?.video
+            if (video != null && !isRecording && take.lengthFrames >= 0) {
+                TextButton(onClick = onCheckSync, enabled = canEdit && video.startPositionFrames != null) {
+                    Text(stringResource(R.string.check_sync))
                 }
             }
         }

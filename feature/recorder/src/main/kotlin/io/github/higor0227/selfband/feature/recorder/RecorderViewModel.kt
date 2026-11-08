@@ -28,6 +28,7 @@ import io.github.higor0227.selfband.core.audio.calibration.MeasurementResult
 import io.github.higor0227.selfband.core.model.AlignmentInfo
 import io.github.higor0227.selfband.core.model.AlignmentMath
 import io.github.higor0227.selfband.core.model.AlignmentMethod
+import io.github.higor0227.selfband.core.model.AspectRatio
 import io.github.higor0227.selfband.core.model.AudioDevice
 import io.github.higor0227.selfband.core.model.AudioDeviceType
 import io.github.higor0227.selfband.core.model.CalibrationMethod
@@ -316,6 +317,17 @@ class RecorderViewModel @Inject constructor(
     // --- canvas (SPEC 2.6, 3.5) ----------------------------------------------------------
 
     fun setPanelMode(mode: PanelMode) = local.update { it.copy(panelMode = mode) }
+
+    /** Canvas format; layers follow the template's variant for it and keep their crops. */
+    fun setAspectRatio(ratio: AspectRatio) {
+        viewModelScope.launch { repository.update(projectId) { it.copy(aspectRatio = ratio) } }
+    }
+
+    fun setLayoutTemplate(templateId: String) {
+        viewModelScope.launch {
+            repository.update(projectId) { it.copy(canvas = it.canvas.copy(templateId = templateId)) }
+        }
+    }
 
     fun setPlayhead(frames: Long) {
         val max = uiState.value.project?.lengthFrames ?: 0L

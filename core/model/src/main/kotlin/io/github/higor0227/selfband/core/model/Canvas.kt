@@ -31,7 +31,11 @@ data class Layer(
     val trackId: String,
     /** Where the layer goes, normalized to the canvas. */
     val frame: NormRect,
-    /** Visible part of the video, normalized to the displayed (rotated) video. */
+    /**
+     * Visible part of the video, normalized to the displayed (rotated) video. It is kept as the
+     * user's intention (center and zoom): when the layer's shape changes (template, format) it
+     * is refit to that shape without distorting, see [CanvasLayout.fitCrop].
+     */
     val crop: NormRect = NormRect.FULL,
     /** Higher draws on top. */
     val z: Int = 0,
@@ -45,11 +49,16 @@ data class Layer(
     val visible: Boolean = true,
 )
 
-/** Canvas of a project: background and layers (SPEC 2.6, 3.6). */
+/** Canvas of a project: background, layout template and layers (SPEC 2.6, 3.6). */
 @Serializable
 data class CanvasSettings(
     /** Solid background color, ARGB. */
     val backgroundColor: Long = 0xFF000000,
-    /** Placements chosen by the user; tracks without one get an automatic grid cell. */
+    /**
+     * Template that places the layers ([LayoutTemplates.AUTO], a built-in id), or null for a
+     * free layout where each stored layer keeps its own frame (layer editing, 3c).
+     */
+    val templateId: String? = LayoutTemplates.AUTO,
+    /** Per-track layer properties; tracks without one get defaults. */
     val layers: List<Layer> = emptyList(),
 )

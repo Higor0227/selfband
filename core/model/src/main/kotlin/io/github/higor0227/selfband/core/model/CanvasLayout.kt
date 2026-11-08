@@ -64,27 +64,69 @@ object CanvasLayout {
         }
 
     /**
-     * Layers to draw, bottom to top: the stored layer of each track whose active take has
-     * video, or an automatic grid cell (with a filling crop) for tracks without one.
+     * Refits [crop] (normalized to a video of aspect [sourceAspect]) to a frame of aspect
+     * [frameAspect] without distortion, keeping what the user chose: its center and its zoom
+     * relative to the largest crop of its own shape. So a full (filling) crop stays full, a
+     * zoomed one stays zoomed by the same factor, and nothing is lost on a format change (the
+     * stored crop itself never changes). The result is clamped inside the video.
      */
-    fun effectiveLayers(project: Project): List<Layer> {
+    fun fitCrop(crop: NormRect, sourceAspect: Float, frameAspect: Float): NormRect {
+        val cropAspect = if (crop.height > 0f) crop.width / crop.height * sourceAspect else frameAspect
+        val zoom = (coverCrop(sourceAspect, cropAspect).width / crop.width.coerceAtLeast(1e-4f)).coerceAtLeast(1f)
+        val max = coverCrop(sourceAspect, frameAspect)
+        val w = max.width / zoom
+        val h = max.height / zoom
+        val cx = crop.x + crop.width / 2f
+        val cy = crop.y + crop.height / 2f
+        return NormRect(
+            (cx - w / 2f).coerceIn(0f, 1f - w),
+            (cy - h / 2f).coerceIn(0f, 1f - h),
+            w,
+            h,
+        )
+    }
+
+    /** Slots of the layout in effect: the template's, the auto grid's, or null for free layout. */
+    fun slots(project: Project, templates: List<LayoutTemplate> = LayoutTemplates.builtIn): List<NormRect>? {
+        val id = project.canvas.templateId ?: return null
+        val canvasAspect = project.aspectRatio.value
+        templates.firstOrNull { it.id == id }?.let { return it.slotsFor(project.aspectRatio) }
+        // Auto (also the fallback for an unknown id): grid shaped by the videos.
+        val videos = project.tracks.mapNotNull { it.activeTake?.video }
+        val sourceAspect = videos.firstOrNull()?.displayAspect ?: (9f / 16f)
+        return cells(videos.size, autoGrid(videos.size, canvasAspect, sourceAspect))
+    }
+
+    /** Video tracks that the current template has no slot for (they are hidden). */
+    fun hiddenByTemplate(project: Project, templates: List<LayoutTemplate> = LayoutTemplates.builtIn): Int {
+        val slots = slots(project, templates) ?: return 0
+        return (project.tracks.count { it.activeTake?.video != null } - slots.size).coerceAtLeast(0)
+    }
+
+    /**
+     * Layers to draw, bottom to top, one per track whose active take has video. The frame comes
+     * from the layout's slot (tracks in order; tracks beyond the last slot are hidden) or, in a
+     * free layout, from the stored layer. Other properties come from the stored layer, and the
+     * crop is refit to the frame's shape.
+     */
+    fun effectiveLayers(project: Project, templates: List<LayoutTemplate> = LayoutTemplates.builtIn): List<Layer> {
         val canvasAspect = project.aspectRatio.value
         val videoTracks = project.tracks.filter { it.activeTake?.video != null }
         val stored = project.canvas.layers.associateBy { it.trackId }
-        val unplaced = videoTracks.filter { it.id !in stored }
-        val sourceAspect = unplaced.firstNotNullOfOrNull { it.activeTake?.video?.displayAspect } ?: (9f / 16f)
-        val grid = autoGrid(unplaced.size, canvasAspect, sourceAspect)
-        val cells = cells(unplaced.size, grid)
-        val auto = unplaced.mapIndexed { i, track ->
-            val cell = cells[i]
+        val slots = slots(project, templates)
+        val fallback by lazy { cells(videoTracks.size, autoGrid(videoTracks.size, canvasAspect, 9f / 16f)) }
+        return videoTracks.mapIndexed { i, track ->
             val video = track.activeTake!!.video!!
-            Layer(
-                trackId = track.id,
-                frame = cell,
-                crop = coverCrop(video.displayAspect, canvasAspect * cell.width / cell.height),
+            val saved = stored[track.id]
+            val base = saved ?: Layer(trackId = track.id, frame = fallback[i])
+            val slot = if (slots != null) slots.getOrNull(i) else base.frame
+            val frame = slot ?: base.frame
+            base.copy(
+                frame = frame,
+                crop = fitCrop(base.crop, video.displayAspect, canvasAspect * frame.width / frame.height),
+                visible = base.visible && slot != null,
             )
-        }.associateBy { it.trackId }
-        return videoTracks.mapNotNull { stored[it.id] ?: auto[it.id] }
+        }
             .withIndex()
             .sortedWith(compareBy({ it.value.z }, { it.index }))
             .map { it.value }

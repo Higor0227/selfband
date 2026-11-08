@@ -4,7 +4,7 @@ Status against the phases in `SPEC.md` §4.
 
 ## Current phase: Phase 3 — Canvas and preview (in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates) and 3c (layer editing, background, guides/snap); 3a was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates) and 3c (layer editing, background, guides/snap); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -329,4 +329,43 @@ Split into milestones (owner's choice): **1a** engine + recording + playback + m
 - Video is not mirrored in the canvas (it is what the camera recorded). A per-layer "flip" can come with layer editing in 3c if you want selfie-style.
 - The recorder screen recomposes on every engine status update (~20×/s). With the camera preview this costs ~30% of a core on the main thread. It predates 3a; I'll optimize it in Phase 7 (UI).
 - No decoder-instance limit yet: proxies and the instance limit are Phase 6 (SPEC 3.5). On this phone 9 decoders should be fine; weaker phones may fail to start some layers (they then show a gray placeholder).
+
+### 3b — Done (confirmed by owner on 2026-11-08)
+- **Formats (SPEC 2.6):** 9:16, 16:9 and 1:1, chosen in the new "Canvas" card. The card replaces the camera settings card while the panel shows the canvas. The format is stored in `project.aspectRatio`.
+- **Layout templates as data:**
+  - `core/model/src/main/resources/.../layout-templates.json` holds the built-in templates 1, 2, 3, 4, 6 and 9, plus "Auto" (the 3a grid, which adapts to the number of tracks and the shape of the videos).
+  - A template can have a slot list per format, plus a `default`:
+    - "2": stacked on 9:16, side by side on 16:9 / 1:1;
+    - "3": one on top and two below on 9:16, three columns otherwise;
+    - "6": 2×3 on 9:16, 3×2 otherwise.
+  - Video tracks fill the slots in track order. Tracks beyond the last slot are hidden, and the card warns ("N trilha(s) … ficam ocultas").
+  - The choice is stored in `project.canvas.templateId`. `null` is reserved for a free layout (3c).
+  - Thumbnails are drawn from the template data at the current format, so there are no image assets.
+- **Nothing is lost when switching (SPEC 2.6):**
+  - Each layer's stored crop is the user's intention (center + zoom). It is refit to the cell's shape at draw time, without distortion, and the stored crop itself never changes. So 9:16 → 16:9 → 9:16 comes back exactly the same.
+  - Other layer properties (opacity, border, corners, z) are kept.
+  - Ready for 3c's crop editing.
+- Tests: `CanvasLayoutTest` now has 12 tests (templates valid and tiling the canvas in every format, crop refit keeps full/zoom/center, extra tracks hidden, format switch uses the right variant without distortion, unknown template falls back to Auto, free layout survives serialization). 47 unit tests in total.
+- **Fix:** in the track card, "Verificar sincronia" moved to the button row next to "Regravar". The video line was being squeezed into one letter per line.
+- On the phone, in a test project with 2 video tracks (deleted afterwards):
+  - 9:16 Auto stacked; 16:9 Auto side by side; "1" showed one track plus the hidden notice; 1:1 "3" gave three columns with the third empty.
+  - Playback in 1:1 / "4" ran at 30 fps with 0 dropped frames.
+  - Format and template are saved in project.json.
+
+### 3b checklist (owner)
+1. In a project with 2–4 video tracks, open "Canvas". The "Canvas" card shows Formato (9:16 / 16:9 / 1:1) and the Layout thumbnails.
+2. **Formats:** switch between the three: the preview changes shape, and Auto rearranges (stacked on 9:16, side by side on 16:9).
+3. **Templates:** try 1, 2, 3, 4, 6, 9 in each format:
+   - the preview matches the thumbnail;
+   - with more tracks than spaces, the extra ones disappear and the card says how many;
+   - empty spaces show the background (black).
+4. **Persistence:** leave the project and come back: format and layout are kept.
+5. **Playback:** play in a non-default format/template; the videos stay in sync as in 3a.
+6. **Track card:** the "Vídeo (câmera …)" line reads normally; "Verificar sincronia" is next to "Regravar".
+
+### 3b known issues / notes
+- **Your projects:** at 12:55 today, between my 3a smoke test and the start of 3b, both projects ("Música 1" and "Música 2") were deleted from the phone. The only code path that removes a project folder is "Excluir projeto" on the Projects screen, so I assume it was done there while testing. If it wasn't you, tell me and I'll investigate.
+- Saving your own layouts as templates (SPEC 2.6) needs the layer editor → 3c.
+- Template choice is per project. Track order decides which track goes in which space; reordering comes with 3c (z-order / drag).
+- A format change briefly shows the old frame stretched until the next frame is drawn (TextureView resize).
 

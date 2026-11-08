@@ -153,4 +153,12 @@
     <string name="panel_camera">Camera</string>
     <string name="panel_canvas">Canvas</string>
     <string name="canvas_no_video">No track with video yet. Record one with the camera on.</string>
+    <!-- Canvas format and layout (phase 3b) -->
+    <string name="canvas_settings">Canvas</string>
+    <string name="canvas_format">Format</string>
+    <string name="canvas_layout">Layout</string>
+    <string name="layout_auto">Auto</string>
+    <string name="layout_slots">Layout with %1$d spaces</string>
+    <string name="canvas_hidden_tracks">%1$d track(s) with video do not fit this layout and are hidden.</string>
+    <string name="canvas_layout_hint">Tracks fill the spaces in order. Auto adapts to the number of tracks and to the shape of the videos. Switching formats keeps the framing of each video.</string>
 </resources>
