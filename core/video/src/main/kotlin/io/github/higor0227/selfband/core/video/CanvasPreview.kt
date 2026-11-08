@@ -34,7 +34,15 @@ data class CanvasScene(
     /** Its layer's crop covers the canvas; frame, corners, border and opacity are ignored. */
     val blur: SceneLayer? = null,
     val image: File? = null,
-)
+) {
+    /** Videos to decode, one decoder each: the drawn layers, then the blur source unless it is one of them. */
+    val decodedLayers: List<SceneLayer>
+        get() {
+            val byFile = LinkedHashMap(layers.associateBy { it.file.absolutePath })
+            blur?.let { byFile.putIfAbsent(it.file.absolutePath, it) }
+            return byFile.values.toList()
+        }
+}
 
 /** Project position (frames) shown at CLOCK_MONOTONIC time `timeNanos`. */
 fun interface PositionSource {

@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 5 — Export (5b confirmed; 5c in progress)
+## Current phase: Phase 6 — Scale and experience (planning)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -643,7 +643,50 @@ Use a project with 2+ tracks with video, a trim and some layout/background chang
 8. Post a test to Instagram/TikTok (optional, per SPEC §5): it should accept the file and keep the sync after their recompression.
 
 ### 5b known issues / notes
-- Fixed for now: H.264, short side 1080, 30 fps, automatic bitrate. HEVC, 720p/4K, 60 fps, manual bitrate and the decoder-instance limits come in 5c.
+- 5b had fixed settings (H.264, 1080p, 30 fps, automatic bitrate); 5c adds the choices.
 - All videos are decoded at once, one decoder each. Projects with many video tracks may hit the device's decoder limit; multi-pass composition is planned for Phase 6 (SPEC 3.5).
 - AAC uses the project sample rate. SPEC asks for 48 kHz; projects are created at the device rate, which is 48 kHz on the test phone. A 44.1 kHz project would export AAC at 44.1 kHz (no resampling yet).
 - Exporting again does not overwrite: Android adds " (1)" to the name.
+
+### 5c — Video options: HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits (confirmed by the owner on 2026-11-08)
+- **Choices (SPEC 2.7):** on the export screen, with Vídeo (MP4) on:
+  - **Codec:** H.264 (default) or HEVC.
+  - **Resolução:** 720p, 1080p (default) or 4K; the short side is 720 / 1080 / 2160.
+  - **Quadros por segundo:** 30 (default) or 60.
+  - **Bitrate:** Automático (default) or Manual, with a slider in 0.5 Mbps steps limited to what the encoder accepts (at most 200 Mbps).
+  - A summary line shows the size, bitrate and estimated file size, e.g. "1080×1920 · 12,5 Mbps · cerca de 11 MB".
+- **Automatic bitrate:** 0.2 bits per pixel per frame for H.264, and 60 % of that for HEVC.
+  - Examples: 1080p30 H.264 12.5 Mbps, HEVC 7.5 Mbps; 4K30 H.264 50 Mbps; 4K60 HEVC 59.5 Mbps.
+  - Any bitrate beyond the encoder's range is clamped at encode time.
+- **Only what the device can do (SPEC 1, "4K when supported"):** the screen asks MediaCodecList, for the project's canvas shape, which codec × size × frame-rate combinations have an encoder, and each one's bitrate range.
+  - A choice no encoder takes is disabled, with a note.
+  - When the value just tapped does not combine with the others, it is kept and the others adapt. For example, at 4K30 on a device without 4K60, tapping 60 fps drops the size to 1080p; tapping 4K at 1080p60 drops to 30 fps.
+  - On the test phone every combination is available.
+- **60 fps note:** if the takes were recorded at a lower rate (30 fps here), the screen warns that frames repeat and the file gets bigger.
+- **Decoder limit (SPEC 3.5):** the export decodes every video at once.
+  - The screen reads each video's format, finds its decoder and compares the count with `getMaxSupportedInstances()`.
+  - If the project needs more, video export is blocked with a clear message (fewer video tracks for now; multi-pass composition is Phase 6).
+  - Audio exports are not affected.
+- **HEVC files** use the `hvc1` tag, the one Apple devices and the social apps expect.
+- **Names:** the done screen and the log now show the name Android actually gave the file (e.g. "Música 2 (1).mp4" when the name was taken), not the requested one.
+- 7 new tests: options → spec (HEVC 4K, manual bitrate, 720p60), size estimate, and choosing the nearest supported mode. 88 unit tests in total.
+- Checked by me on the phone, project "Música 2" (7.09 s):
+  - **HEVC 4K60:** 2160×3840, 426 frames, `hvc1`, 52.1 MB (screen estimate: 53 MB), same 42.7 ms AAC compensation.
+  - **H.264 720p, manual 13 Mbps:** 720×1280, 213 frames, 10.9 MB.
+  - **Cleanup:** I deleted those test files; `Música 2.mp4` from 5b is still there.
+  - **Not tested:** I could not trigger the decoder limit here (3 videos is far below this phone's limit).
+
+### 5c checklist (owner)
+1. Open **Exportar**: the Vídeo card shows Codec, Resolução, Quadros por segundo and Bitrate, plus the summary with size and estimated file size. Change each one and watch the summary update.
+2. Export **HEVC 4K 60 fps** (Automático). The file plays in the gallery, looks like the preview and stays in sync on the clap. It is much bigger: compare with the estimate.
+3. Choose **Manual** bitrate, move the slider, export **720p**. The file size follows the chosen bitrate (roughly Mbps × seconds / 8).
+4. Export **H.264 1080p 30** again. It is the same as in 5b.
+5. With 60 fps selected, the note about 30 fps takes appears.
+6. Optional: share an HEVC file and an H.264 file to Instagram/TikTok and see which they accept. H.264 is the safe default.
+7. Optional: try a project with many video tracks. If the phone cannot decode them all at once, the screen says so and the Exportar button stays off while Vídeo is on.
+
+### 5c known issues / notes
+- Choices are not remembered between exports yet (configurable defaults are Phase 6, SPEC 2.8).
+- 60 fps only makes the export smoother when the takes have 60 fps; the camera records at 30 fps today.
+- The decoder check counts instances only. Real throughput (several 4K decodes at once) is measured in Phase 6 together with proxies.
+- Phase 5 (end of the MVP) is complete.

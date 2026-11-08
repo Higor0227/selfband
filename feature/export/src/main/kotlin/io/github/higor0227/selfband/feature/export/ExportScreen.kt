@@ -48,10 +48,8 @@ import io.github.higor0227.selfband.core.export.ExportFailure
 import io.github.higor0227.selfband.core.export.ExportNames
 import io.github.higor0227.selfband.core.export.ExportState
 import io.github.higor0227.selfband.core.export.ExportStep
-import io.github.higor0227.selfband.core.export.VideoSpec
 import io.github.higor0227.selfband.core.export.WavFormat
 import io.github.higor0227.selfband.core.model.Project
-import io.github.higor0227.selfband.core.model.value
 
 @Composable
 fun ExportRoute(onBack: () -> Unit, viewModel: ExportViewModel = hiltViewModel()) {
@@ -64,7 +62,13 @@ fun ExportRoute(onBack: () -> Unit, viewModel: ExportViewModel = hiltViewModel()
     ExportScreen(
         state = state,
         onBack = onBack,
-        onVideo = viewModel::setVideo,
+        video = VideoActions(
+            onVideo = viewModel::setVideo,
+            onCodec = viewModel::setCodec,
+            onResolution = viewModel::setResolution,
+            onFrameRate = viewModel::setFrameRate,
+            onBitRate = viewModel::setBitRate,
+        ),
         onMixWav = viewModel::setMixWav,
         onStems = viewModel::setStems,
         onFormat = viewModel::setFormat,
@@ -87,7 +91,7 @@ fun ExportRoute(onBack: () -> Unit, viewModel: ExportViewModel = hiltViewModel()
 private fun ExportScreen(
     state: ExportUiState,
     onBack: () -> Unit,
-    onVideo: (Boolean) -> Unit,
+    video: VideoActions,
     onMixWav: (Boolean) -> Unit,
     onStems: (Boolean) -> Unit,
     onFormat: (WavFormat) -> Unit,
@@ -133,9 +137,9 @@ private fun ExportScreen(
                         ),
                         color = MaterialTheme.colorScheme.error,
                     )
-                    OptionsCard(state, onVideo, onMixWav, onStems, onFormat, onStart)
+                    OptionsCard(state, video, onMixWav, onStems, onFormat, onStart)
                 }
-                else -> OptionsCard(state, onVideo, onMixWav, onStems, onFormat, onStart)
+                else -> OptionsCard(state, video, onMixWav, onStems, onFormat, onStart)
             }
         }
     }
@@ -154,7 +158,7 @@ private fun RangeText(project: Project) {
 @Composable
 private fun OptionsCard(
     state: ExportUiState,
-    onVideo: (Boolean) -> Unit,
+    video: VideoActions,
     onMixWav: (Boolean) -> Unit,
     onStems: (Boolean) -> Unit,
     onFormat: (WavFormat) -> Unit,
@@ -162,22 +166,7 @@ private fun OptionsCard(
 ) {
     val options = state.options
     val name = ExportNames.sanitize(state.project?.name.orEmpty())
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.export_video_section), style = MaterialTheme.typography.titleSmall)
-            val spec = VideoSpec.forAspect(state.project?.aspectRatio?.value ?: (9f / 16f))
-            CheckRow(
-                stringResource(R.string.export_video),
-                stringResource(
-                    R.string.export_video_hint, spec.width, spec.height, spec.frameRate,
-                    "%.1f".format(spec.bitRate / 1_000_000.0).removeSuffix(".0").removeSuffix(",0"),
-                ),
-                options.video,
-                onVideo,
-            )
-            Text(stringResource(R.string.export_destination, "Movies/Selfband/$name.mp4"), style = MaterialTheme.typography.bodySmall)
-        }
-    }
+    VideoCard(state, name, video)
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.export_audio), style = MaterialTheme.typography.titleSmall)
@@ -203,7 +192,7 @@ private fun OptionsCard(
 }
 
 @Composable
-private fun CheckRow(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun CheckRow(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }, verticalAlignment = Alignment.Top) {
         Checkbox(checked = checked, onCheckedChange = onChange)
         Column(Modifier.padding(top = 12.dp)) {

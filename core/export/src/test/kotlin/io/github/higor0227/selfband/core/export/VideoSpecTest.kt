@@ -32,6 +32,24 @@ class VideoSpecTest {
     }
 
     @Test
+    fun optionsResolveToSizeCodecAndBitrate() {
+        val hevc4k = VideoSpec.of(9f / 16f, VideoOptions(VideoCodec.HEVC, VideoResolution.P2160, 30))
+        assertEquals(2160 to 3840, hevc4k.width to hevc4k.height)
+        assertEquals("video/hevc", hevc4k.mimeType)
+        assertEquals(30_000_000, hevc4k.bitRate)                 // 49.8 Mbps x 0.6
+        assertEquals(7_500_000, VideoSpec.of(9f / 16f, VideoOptions(codec = VideoCodec.HEVC)).bitRate)
+        val manual = VideoSpec.of(16f / 9f, VideoOptions(resolution = VideoResolution.P720, frameRate = 60, bitRate = 8_000_000))
+        assertEquals(Triple(1280, 720, 60), Triple(manual.width, manual.height, manual.frameRate))
+        assertEquals(8_000_000, manual.bitRate)
+    }
+
+    @Test
+    fun estimatedSizeCountsVideoAndAudio() {
+        val spec = VideoSpec(1080, 1920, 30, 12_000_000)
+        assertEquals((12_256_000 * 10.0 / 8).toLong(), VideoSpec.estimatedBytes(spec, 10.0))
+    }
+
+    @Test
     fun videoIsTheDefaultExport() {
         val options = ExportOptions()
         assertTrue(options.video)

@@ -170,10 +170,7 @@ internal class CanvasDrawer(handler: Handler) {
 
     companion object {
         /** Files to decode for [scene]: the drawn layers, then the blur source if it is not one of them. */
-        fun wantedLayers(scene: CanvasScene): LinkedHashMap<String, SceneLayer> {
-            val wanted = LinkedHashMap(scene.layers.associateBy { it.file.absolutePath })
-            scene.blur?.let { wanted.putIfAbsent(it.file.absolutePath, it) }
-            return wanted
-        }
+        fun wantedLayers(scene: CanvasScene): LinkedHashMap<String, SceneLayer> =
+            LinkedHashMap(scene.decodedLayers.associateBy { it.file.absolutePath })
     }
 }

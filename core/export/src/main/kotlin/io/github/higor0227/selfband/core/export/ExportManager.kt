@@ -83,13 +83,13 @@ class ExportManager @Inject constructor(
                 store.discard(written.map { it.item })
                 return
             }
-            store.publish(written.map { it.item })
-            Log.i(LOG_TAG, "Export of ${project.name}: ${written.size} file(s)")
+            val published = store.publish(written.map { it.item })
+            Log.i(LOG_TAG, "Export of ${project.name}: ${published.joinToString { it.displayName }}")
             _state.value = ExportState.Done(
                 projectId,
                 project.name,
                 written.map { it.folder }.distinct(),
-                written.map { ExportOutput(it.item.uri.toString(), it.item.displayName, it.item.mimeType) },
+                published.map { ExportOutput(it.uri.toString(), it.displayName, it.mimeType) },
             )
         } catch (e: CancellationException) {
             store.discard(written.map { it.item })
@@ -171,7 +171,7 @@ class ExportManager @Inject constructor(
                     { trackId, name -> repository.takeAudioFile(project.id, trackId, name) },
                     { name -> repository.projectMediaFile(project.id, name) },
                 )
-                val spec = VideoSpec.forAspect(project.aspectRatio.value)
+                val spec = VideoSpec.of(project.aspectRatio.value, options.videoOptions)
                 val item = store.create(MediaStoreFiles.Kind.VIDEO, null, "$baseName.mp4", MediaStoreFiles.MIME_MP4) { pfd ->
                     mix.reset()
                     // The renderer's EGL context and the codecs stay on one dedicated thread.

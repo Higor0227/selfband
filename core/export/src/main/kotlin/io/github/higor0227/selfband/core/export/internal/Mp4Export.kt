@@ -111,7 +111,6 @@ internal class Mp4Export(
     private fun createVideoEncoder(): MediaCodec {
         val format = MediaFormat.createVideoFormat(spec.mimeType, spec.width, spec.height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, spec.bitRate)
             setInteger(MediaFormat.KEY_FRAME_RATE, spec.frameRate)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
@@ -121,9 +120,13 @@ internal class Mp4Export(
         val codecs = MediaCodecList(MediaCodecList.REGULAR_CODECS)
         val name = codecs.findEncoderForFormat(format)
             ?: throw VideoExportException("no ${spec.mimeType} encoder for ${spec.width}x${spec.height}@${spec.frameRate}")
-        // High profile when the encoder offers it (better quality per bit); otherwise its default.
-        val high = codecs.codecInfos.firstOrNull { it.name == name }
-            ?.getCapabilitiesForType(spec.mimeType)?.profileLevels
+        val caps = codecs.codecInfos.firstOrNull { it.name == name }?.getCapabilitiesForType(spec.mimeType)
+        // A manual (or automatic 4K60) bitrate beyond what the encoder takes is clamped to its range.
+        val bitRate = caps?.videoCapabilities?.bitrateRange?.clamp(spec.bitRate) ?: spec.bitRate
+        if (bitRate != spec.bitRate) Log.i(LOG_TAG, "export: bitrate ${spec.bitRate} clamped to $bitRate")
+        format.setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+        // H.264 High profile when the encoder offers it (better quality per bit); otherwise its default.
+        val high = caps?.profileLevels
             ?.filter { it.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh }
             ?.maxByOrNull { it.level }
         if (spec.mimeType == VideoSpec.MIME_AVC && high != null) {

@@ -7,7 +7,23 @@
     <string name="export_range_trimmed">trimmed in the timeline</string>
     <string name="export_video_section">Video</string>
     <string name="export_video">Video (MP4)</string>
-    <string name="export_video_hint">%1$d×%2$d, %3$d fps, H.264 at %4$s Mbps, with the mix as AAC 256 kbps. The canvas exactly as in the preview, ready for Instagram, TikTok etc.</string>
+    <string name="export_video_hint">The canvas exactly as in the preview, with the mix as AAC 256 kbps. H.264 plays everywhere (Instagram, TikTok…); HEVC makes smaller files.</string>
+    <string name="export_codec">Codec</string>
+    <string name="export_codec_h264" translatable="false">H.264</string>
+    <string name="export_codec_hevc" translatable="false">HEVC</string>
+    <string name="export_resolution">Resolution</string>
+    <string name="export_res_720" translatable="false">720p</string>
+    <string name="export_res_1080" translatable="false">1080p</string>
+    <string name="export_res_2160" translatable="false">4K</string>
+    <string name="export_frame_rate">Frame rate</string>
+    <string name="export_fps">%1$d fps</string>
+    <string name="export_bitrate">Bitrate</string>
+    <string name="export_bitrate_auto">Automatic</string>
+    <string name="export_bitrate_manual">Manual</string>
+    <string name="export_video_summary">%1$d×%2$d · %3$s Mbps · about %4$s</string>
+    <string name="export_fps_repeat">The videos were recorded at %1$d fps: at %2$d fps their frames repeat and the file gets bigger.</string>
+    <string name="export_unsupported_hint">Options this device cannot encode are disabled.</string>
+    <string name="export_decoder_limit">This project has %1$d videos, but this device decodes at most %2$d of them at once. For now, export with fewer video tracks (composing in several passes comes in a later phase).</string>
     <string name="export_audio">Audio</string>
     <string name="export_mix_wav">Mix (WAV)</string>
     <string name="export_mix_wav_hint">The stereo mix exactly as you hear it, with the mixer, EQ, reverb and limiter. The metronome is never exported.</string>

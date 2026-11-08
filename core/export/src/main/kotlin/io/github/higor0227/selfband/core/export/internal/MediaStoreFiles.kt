@@ -56,9 +56,18 @@ internal class MediaStoreFiles(private val resolver: ContentResolver) {
         return item
     }
 
-    fun publish(items: List<Item>) {
+    /** Makes [items] visible. Returns them with the names Android settled on ("name (1).mp4" on a clash). */
+    fun publish(items: List<Item>): List<Item> {
         val values = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
-        items.forEach { resolver.update(it.uri, values, null, null) }
+        return items.map { item ->
+            resolver.update(item.uri, values, null, null)
+            val actual = runCatching {
+                resolver.query(item.uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use {
+                    if (it.moveToFirst()) it.getString(0) else null
+                }
+            }.getOrNull()
+            if (actual != null && actual != item.displayName) Item(item.uri, actual, item.mimeType) else item
+        }
     }
 
     fun discard(items: List<Item>) {
