@@ -135,4 +135,19 @@
     <string name="ghost_none">Nenhum</string>
     <string name="ghost_opacity">Opacidade</string>
     <string name="ghost_hint">Mostra uma trilha anterior sobre a prévia para repetir o enquadramento. Não é gravado.</string>
+    <!-- Takes (fase 2c) -->
+    <string name="record_new_take">Regravar</string>
+    <string name="takes_button">Takes (%1$d)</string>
+    <string name="take_k_of_n">take %1$d de %2$d</string>
+    <string name="takes_title">Takes da trilha %1$d</string>
+    <string name="takes_hint">O take selecionado é o que toca. Os outros ficam guardados até você excluí-los.</string>
+    <string name="take_n">Take %1$d</string>
+    <string name="take_incomplete">incompleto</string>
+    <string name="take_video">vídeo (câmera %1$s, %2$dp)</string>
+    <string name="delete_take">Excluir take</string>
+    <string name="delete_take_title">Excluir o take %1$d?</string>
+    <string name="delete_take_message">Os arquivos de áudio e vídeo dele serão apagados. Não dá para desfazer.</string>
+    <string name="delete_track_title">Excluir a trilha %1$d?</string>
+    <string name="delete_track_message">Todos os %1$d take(s) desta trilha e os arquivos deles serão apagados. Não dá para desfazer.</string>
+    <string name="delete">Excluir</string>
 </resources>

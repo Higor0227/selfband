@@ -154,6 +154,11 @@ fun RecorderRoute(onBack: () -> Unit, viewModel: RecorderViewModel = hiltViewMod
             onPreviewGhostOpacity = {},
             onSetGhostOpacity = viewModel::setGhostOpacity,
         ),
+        takes = TakeActions(
+            onRecordTake = viewModel::recordNewTake,
+            onSetActiveTake = viewModel::setActiveTake,
+            onDeleteTake = viewModel::deleteTake,
+        ),
     )
 }
 
@@ -178,6 +183,7 @@ fun RecorderScreen(
     device: DeviceActions,
     video: VideoActions,
     cameraSettings: CameraSettingsActions,
+    takes: TakeActions,
 ) {
     // Ghost opacity follows the slider live; it is saved when the slider is released.
     val savedOpacity = state.cameraSettings.ghostOpacity
@@ -287,8 +293,9 @@ fun RecorderScreen(
                     index = index,
                     track = track,
                     sampleRate = state.project?.sampleRate ?: 48_000,
-                    isRecording = recording && index == tracks.lastIndex,
+                    isRecording = state.recordingTrackId == track.id,
                     canEdit = state.isIdle,
+                    canRecord = state.isIdle && state.status.isOpen,
                     peak = state.trackPeak(track.id),
                     onToggleMute = { onToggleMute(track.id) },
                     onPreviewVolume = { onPreviewVolume(track.id, it) },
@@ -296,6 +303,11 @@ fun RecorderScreen(
                     onSetManualOffset = { onSetManualOffset(track.id, it) },
                     onDelete = { onDeleteTrack(track.id) },
                     onCheckSync = { video.onCheckSync(track.id) },
+                    onRecordTake = {
+                        takes.onRecordTake(track.id, (view.display?.rotation ?: android.view.Surface.ROTATION_0) * 90)
+                    },
+                    onSetActiveTake = { takes.onSetActiveTake(track.id, it) },
+                    onDeleteTake = { takes.onDeleteTake(track.id, it) },
                 )
             }
             item { EngineInfo(state) }
@@ -389,6 +401,7 @@ private fun TrackCard(
     sampleRate: Int,
     isRecording: Boolean,
     canEdit: Boolean,
+    canRecord: Boolean,
     peak: Float,
     onToggleMute: () -> Unit,
     onPreviewVolume: (Double) -> Unit,
@@ -396,14 +409,25 @@ private fun TrackCard(
     onSetManualOffset: (Double) -> Unit,
     onDelete: () -> Unit,
     onCheckSync: () -> Unit,
+    onRecordTake: () -> Unit,
+    onSetActiveTake: (String) -> Unit,
+    onDeleteTake: (String) -> Unit,
 ) {
     val take = track.activeTake
     var offsetDialog by remember { mutableStateOf(false) }
+    var takesDialog by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
       Column {
         Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.track_n, index + 1), style = MaterialTheme.typography.titleSmall)
+                val activeIndex = track.takes.indexOfFirst { it.id == take?.id }
+                Text(
+                    stringResource(R.string.track_n, index + 1) + if (track.takes.size > 1) {
+                        " · " + stringResource(R.string.take_k_of_n, activeIndex + 1, track.takes.size)
+                    } else "",
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 if (isRecording || take == null || take.lengthFrames < 0) {
                     Text(stringResource(R.string.recording_now), color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall)
@@ -458,8 +482,17 @@ private fun TrackCard(
             IconButton(onClick = { offsetDialog = true }, enabled = canEdit && take != null && take.lengthFrames >= 0) {
                 Icon(Icons.Filled.Edit, stringResource(R.string.adjust_offset))
             }
-            IconButton(onClick = onDelete, enabled = canEdit) {
+            IconButton(onClick = { confirmDelete = true }, enabled = canEdit) {
                 Icon(Icons.Filled.Delete, stringResource(R.string.delete_track))
+            }
+        }
+        // Takes: re-record this track (new take) or choose among the saved ones.
+        Row(Modifier.padding(start = 8.dp, end = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onRecordTake, enabled = canRecord) { Text(stringResource(R.string.record_new_take)) }
+            if (track.takes.size > 1) {
+                TextButton(onClick = { takesDialog = true }, enabled = canEdit) {
+                    Text(stringResource(R.string.takes_button, track.takes.size))
+                }
             }
         }
         // Volume fader: live while dragging, saved on release. Tap the value to reset to 0 dB.
@@ -487,6 +520,29 @@ private fun TrackCard(
             }
         }
       }
+    }
+    if (takesDialog) {
+        TakesDialog(
+            trackNumber = index + 1,
+            track = track,
+            sampleRate = sampleRate,
+            onSetActive = onSetActiveTake,
+            onDelete = onDeleteTake,
+            onClose = { takesDialog = false },
+        )
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.delete_track_title, index + 1)) },
+            text = { Text(stringResource(R.string.delete_track_message, track.takes.size)) },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete() }) {
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(android.R.string.cancel)) } },
+        )
     }
     if (offsetDialog && take != null) {
         ManualOffsetDialog(
@@ -600,6 +656,13 @@ private fun formatTime(frames: Long, sampleRate: Int): String {
     val totalMs = kotlin.math.abs(frames) * 1000 / sampleRate.coerceAtLeast(1)
     return sign + String.format(Locale.ROOT, "%d:%02d.%03d", totalMs / 60_000, (totalMs / 1000) % 60, totalMs % 1000)
 }
+
+/** Callbacks for takes (SPEC 2.2). */
+data class TakeActions(
+    val onRecordTake: (trackId: String, displayRotationDegrees: Int) -> Unit,
+    val onSetActiveTake: (trackId: String, takeId: String) -> Unit,
+    val onDeleteTake: (trackId: String, takeId: String) -> Unit,
+)
 
 /** Callbacks for the camera panel and the sync check. */
 data class VideoActions(

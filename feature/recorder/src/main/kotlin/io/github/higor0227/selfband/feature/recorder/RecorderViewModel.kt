@@ -166,6 +166,8 @@ data class RecorderUiState(
     val capabilities: CameraCapabilities? = null,
     val ghost: GhostUi? = null,
     val syncCheck: SyncCheckUi? = null,
+    /** Track receiving the take being recorded (new track or a re-take). */
+    val recordingTrackId: String? = null,
 ) {
     val cameraSettings: CameraSettings get() = project?.camera ?: CameraSettings()
     val transport: TransportState get() = status.transport
@@ -198,6 +200,11 @@ class RecorderViewModel @Inject constructor(
     private var screenActive = false
     private var engineTrackIds: List<String> = emptyList()
     private var recordingTrackId: String? = null
+    private var recordingTakeId: String? = null
+    /** True if the take being recorded created its track (dropping it removes the track). */
+    private var recordingNewTrack = false
+    /** Active take of the track before a re-take, restored if the re-take is dropped. */
+    private var previousActiveTakeId: String? = null
     /** Profile key and calibration in effect when the current take started. */
     private var recordingCalibration: Pair<String, LatencyCalibration>? = null
     private var calibrationJob: Job? = null
@@ -220,8 +227,10 @@ class RecorderViewModel @Inject constructor(
             repository.observe(projectId).filterNotNull().map { p ->
                 val id = p.camera.ghostTrackId ?: return@map null
                 val track = p.tracks.firstOrNull { it.id == id } ?: return@map null
-                val take = track.activeTake ?: return@map null
-                val video = take.video ?: return@map null
+                // The active take's video; during a re-take (new take still empty), the
+                // newest earlier take with video, so the framing can be repeated.
+                val video = track.activeTake?.video ?: track.takes.lastOrNull { it.video != null }?.video
+                    ?: return@map null
                 Triple(track.id, repository.takeAudioFile(p.id, track.id, video.file), video)
             }.distinctUntilChanged().collectLatest { ghost ->
                 val ui = ghost?.let { (trackId, file, video) ->
@@ -489,12 +498,18 @@ class RecorderViewModel @Inject constructor(
         viewModelScope.launch { ops.withLock { finishTake(engine.stop(), interrupted = false) } }
     }
 
-    fun recordNewTrack(displayRotationDegrees: Int = 0) {
+    fun recordNewTrack(displayRotationDegrees: Int = 0) = record(null, displayRotationDegrees)
+
+    /** Re-records [trackId]: a new take becomes active; the previous ones are kept (SPEC 2.2). */
+    fun recordNewTake(trackId: String, displayRotationDegrees: Int = 0) = record(trackId, displayRotationDegrees)
+
+    private fun record(existingTrackId: String?, displayRotationDegrees: Int) {
         viewModelScope.launch {
             ops.withLock {
                 if (engine.status.value.transport != TransportState.IDLE) return@withLock
                 val project = currentProject()
-                val trackId = UUID.randomUUID().toString()
+                val existing = existingTrackId?.let { id -> project.tracks.firstOrNull { it.id == id } ?: return@withLock }
+                val trackId = existing?.id ?: UUID.randomUUID().toString()
                 val takeId = UUID.randomUUID().toString()
                 val file = repository.takeAudioFile(project.id, trackId, "$takeId.wav")
                 val mode = effectiveChannelMode()
@@ -509,11 +524,22 @@ class RecorderViewModel @Inject constructor(
                     alignment = AlignmentInfo(AlignmentMethod.TIMESTAMPS, 0.0),
                     createdAtMillis = System.currentTimeMillis(),
                 )
-                val name = "${TRACK_NAME_PREFIX}${project.tracks.size + 1}"
                 // Persist the take before recording, so a crash can recover it (SPEC 2.1).
-                repository.update(project.id) {
-                    it.copy(tracks = it.tracks + Track(trackId, name, listOf(take), takeId))
+                val updated = repository.update(project.id) { p ->
+                    if (existing == null) {
+                        val name = "${TRACK_NAME_PREFIX}${p.tracks.size + 1}"
+                        p.copy(tracks = p.tracks + Track(trackId, name, listOf(take), takeId))
+                    } else {
+                        p.copy(tracks = p.tracks.map {
+                            if (it.id == trackId) it.copy(takes = it.takes + take, activeTakeId = takeId) else it
+                        })
+                    }
                 }
+                recordingNewTrack = existing == null
+                previousActiveTakeId = existing?.activeTake?.id
+                // A re-take replaces what the track had: the old take is not played meanwhile
+                // (the new, still empty take is the active one).
+                if (existing != null) loadTracks(updated)
                 val route = local.value.route
                 val calibration = route?.let { profiles.get(it.key)?.calibration }
                 recordingCalibration = if (route != null && calibration != null) route.key to calibration else null
@@ -529,15 +555,46 @@ class RecorderViewModel @Inject constructor(
                 if (wantVideo && !videoRecording) Log.w(LOG_TAG, "Video did not start; recording audio only")
                 if (engine.record(file, -countIn, mode)) {
                     recordingTrackId = trackId
+                    recordingTakeId = takeId
+                    local.update { it.copy(recordingTrackId = trackId) }
+                    Log.i(LOG_TAG, if (existing == null) "Recording new track" else "Recording take ${existing.takes.size + 1} of track $trackId")
                 } else {
                     Log.e(LOG_TAG, "Could not start recording")
                     if (videoRecording) {
                         videoRecording = false
                         camera.stopRecording()
                     }
-                    removeTrack(trackId)
+                    dropRecordedTake(trackId, takeId)
                     local.update { it.copy(notice = RecorderNotice.RECORD_FAILED) }
                 }
+            }
+        }
+    }
+
+    /** Makes [takeId] the take that plays and exports for its track. Only while idle. */
+    fun setActiveTake(trackId: String, takeId: String) {
+        viewModelScope.launch {
+            ops.withLock {
+                if (engine.status.value.transport != TransportState.IDLE) return@withLock
+                val updated = repository.update(projectId) { p ->
+                    p.copy(tracks = p.tracks.map { t ->
+                        if (t.id == trackId && t.takes.any { it.id == takeId }) t.copy(activeTakeId = takeId) else t
+                    })
+                }
+                if (engine.status.value.isOpen) loadTracks(updated)
+            }
+        }
+    }
+
+    /** Deletes one take (files included). The last take of a track is removed with the track. */
+    fun deleteTake(trackId: String, takeId: String) {
+        viewModelScope.launch {
+            ops.withLock {
+                if (engine.status.value.transport != TransportState.IDLE) return@withLock
+                val track = currentProject().tracks.firstOrNull { it.id == trackId } ?: return@withLock
+                if (track.takes.size <= 1) return@withLock
+                removeTake(trackId, takeId, restoreActive = null)
+                if (engine.status.value.isOpen) loadTracks(currentProject())
             }
         }
     }
@@ -908,10 +965,14 @@ class RecorderViewModel @Inject constructor(
             camera.stopRecording()
         } else null
         val trackId = recordingTrackId ?: run { video?.file?.delete(); return }
+        val takeId = recordingTakeId ?: return
         recordingTrackId = null
+        recordingTakeId = null
+        local.update { it.copy(recordingTrackId = null) }
         // Nothing past the count-in (stopped before project frame 0): drop the take.
         if (result == null || result.frames <= 0 || result.startPosition + result.frames <= 0) {
-            removeTrack(trackId)
+            dropRecordedTake(trackId, takeId)
+            if (engine.status.value.isOpen) loadTracks(currentProject())
             return
         }
         val project = currentProject()
@@ -939,7 +1000,7 @@ class RecorderViewModel @Inject constructor(
         val updated = repository.update(project.id) { p ->
             p.copy(tracks = p.tracks.map { track ->
                 if (track.id != trackId) track else track.copy(takes = track.takes.map { take ->
-                    if (take.id != track.activeTakeId) take else take.copy(
+                    if (take.id != takeId) take else take.copy(
                         channelCount = result.channels,
                         lengthFrames = result.frames,
                         recordStartFrame = result.startPosition,
@@ -988,6 +1049,34 @@ class RecorderViewModel @Inject constructor(
             })
         }
 
+    /** Drops a take that recorded nothing: the whole track if the take created it. */
+    private suspend fun dropRecordedTake(trackId: String, takeId: String) {
+        if (recordingNewTrack) removeTrack(trackId) else removeTake(trackId, takeId, previousActiveTakeId)
+        previousActiveTakeId = null
+    }
+
+    /**
+     * Removes one take and its files. The active take becomes [restoreActive] if given, else
+     * stays (if another take was active) or falls back to the newest remaining take.
+     */
+    private suspend fun removeTake(trackId: String, takeId: String, restoreActive: String?) {
+        val project = currentProject()
+        val take = project.tracks.firstOrNull { it.id == trackId }?.takes?.firstOrNull { it.id == takeId } ?: return
+        repository.takeAudioFile(project.id, trackId, take.audioFile).delete()
+        repository.takeAudioFile(project.id, trackId, take.video?.file ?: "${take.id}.mp4").delete()
+        repository.update(project.id) { p ->
+            p.copy(tracks = p.tracks.map { t ->
+                if (t.id != trackId) return@map t
+                val remaining = t.takes.filterNot { it.id == takeId }
+                val active = restoreActive?.takeIf { id -> remaining.any { it.id == id } }
+                    ?: t.activeTakeId?.takeIf { id -> id != takeId && remaining.any { it.id == id } }
+                    ?: remaining.lastOrNull()?.id
+                t.copy(takes = remaining, activeTakeId = active)
+            })
+        }
+        Log.i(LOG_TAG, "Take $takeId removed from track $trackId")
+    }
+
     private suspend fun removeTrack(trackId: String) {
         val project = currentProject()
         project.tracks.firstOrNull { it.id == trackId }?.takes?.forEach { take ->
@@ -995,6 +1084,8 @@ class RecorderViewModel @Inject constructor(
             // The video may exist before the take knows about it (recording in progress).
             repository.takeAudioFile(project.id, trackId, take.video?.file ?: "${take.id}.mp4").delete()
         }
+        // The track folder, now empty (File.delete leaves it alone if anything is left).
+        repository.takeAudioFile(project.id, trackId, "x").parentFile?.delete()
         repository.update(project.id) { p -> p.copy(tracks = p.tracks.filterNot { it.id == trackId }) }
     }
 

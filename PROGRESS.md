@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 2 — Camera (in progress)
+## Current phase: Phase 3 — Canvas and preview (in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. **2c is in progress.** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -228,3 +228,44 @@ Split into milestones (owner's choice): **1a** engine + recording + playback + m
 - The ghost uses the take's frame at ~1 s; choosing a specific frame could come later if needed.
 - 25 fps is offered only where the camera has a matching AE range (not on the test phone).
 - Default camera/quality settings for new projects belong to phase 2.8 (preferences); for now each new project starts at front / 1080p30 / no locks.
+
+### 2c — Done (confirmed by owner on 2026-11-08)
+- **Takes (SPEC 2.2):**
+  - Each track has "Regravar". It records a new take into the same track, which becomes the active one; earlier takes are kept.
+  - During a re-take the other tracks play and the track's old take is silent (it is being replaced).
+  - A re-take that records nothing (stopped during the count-in, or failed to start) is dropped, and the previous active take comes back.
+- **Takes dialog** ("Takes (n)", shown when a track has more than one take):
+  - newest first, with duration, video (camera, resolution) or audio-only, and date/time
+  - pick the active take (it is what plays, and later what is exported)
+  - delete a take (with confirmation; audio and video files are deleted)
+  - the last take of a track can only go with the track
+- The track title shows "take k de n". **Deleting a track now asks for confirmation** (it deletes all its takes).
+- **Audio-only tracks:** the "Vídeo" switch decides it per recording, so a track (or a single take) can be audio-only; the take list and track card say "Só áudio". Lens and resolution are also per take.
+- Ghost: while a track used as the ghost is being re-taken, the ghost keeps showing that track's previous take, so you can repeat the framing.
+- On the phone:
+  - Recorded a track, re-recorded it ("take 2 de 2"; log "Recording take 2 of track …", only 2 tracks playing).
+  - Opened the takes dialog, made take 1 active, deleted take 2 with confirmation.
+  - Deleted the track with confirmation; its files were removed and the project was left with your two tracks only.
+  - **Not tested on the device:** dropping a re-take stopped during the count-in (needs a stop within 2 s).
+
+### 2c checklist (owner)
+1. **Re-take:**
+   - Record a track, then "Regravar" on it while other tracks exist: you hear the other tracks, not the old take of this one.
+   - After Stop the card says "take 2 de 2", and playback uses the new take.
+2. **Choosing:**
+   - "Takes (2)": switch to take 1; playback uses it at once, with its own alignment and video.
+   - Switch back. The manual offset and "Verificar sincronia" act on the active take.
+3. **Deleting:**
+   - Delete a non-active take: it disappears, the active one stays.
+   - Delete the active take: the newest remaining becomes active.
+   - With one take left, its delete button is disabled.
+   - Deleting a track asks first.
+4. **Dropped re-take:** "Regravar" and stop during the count-in: no new take is left behind and the previous take is still active.
+5. **Audio-only:** turn "Vídeo" off and re-record a video track: that take is "Só áudio". Turn it on again and re-record: video again. Mixed takes in one track work.
+6. **Ghost + re-take:** set the ghost to a track and re-record that same track: the ghost stays visible during the take.
+7. **Phase 2 criterion (SPEC 4):** clap test ±1 frame (passed in 2a: 0 frames). With 2c, everything in phase 2 is implemented: video without audio synced to the engine, front/back, AE/AWB/AF locks, ghost, grid, takes.
+
+### 2c known issues / notes
+- Track names are still "Trilha N" by position; renaming tracks isn't in the SPEC for now.
+- The take dialog shows the take number by recording order; numbers shift after a deletion.
+- Deleting a track now also removes its folder. Empty folders left by tracks deleted before 2c stay (harmless).

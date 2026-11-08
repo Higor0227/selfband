@@ -135,7 +135,7 @@ fun CameraSettingsCard(state: RecorderUiState, ghostOpacity: Float, actions: Cam
 private fun GhostPicker(state: RecorderUiState, ghostOpacity: Float, actions: CameraSettingsActions) {
     val settings = state.cameraSettings
     val tracks = state.project?.tracks.orEmpty()
-    val candidates = tracks.withIndex().filter { it.value.activeTake?.video != null }
+    val candidates = tracks.withIndex().filter { t -> t.value.takes.any { it.video != null } }
     if (candidates.isEmpty()) return
     var menu by remember { mutableStateOf(false) }
     val chosenIndex = tracks.indexOfFirst { it.id == settings.ghostTrackId }

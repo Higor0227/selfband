@@ -134,4 +134,19 @@
     <string name="ghost_none">None</string>
     <string name="ghost_opacity">Opacity</string>
     <string name="ghost_hint">Shows a previous track over the preview to repeat its framing. It is not recorded.</string>
+    <!-- Takes (phase 2c) -->
+    <string name="record_new_take">Re-record</string>
+    <string name="takes_button">Takes (%1$d)</string>
+    <string name="take_k_of_n">take %1$d of %2$d</string>
+    <string name="takes_title">Takes of track %1$d</string>
+    <string name="takes_hint">The selected take is the one that plays. The others stay saved until you delete them.</string>
+    <string name="take_n">Take %1$d</string>
+    <string name="take_incomplete">incomplete</string>
+    <string name="take_video">video (%1$s camera, %2$dp)</string>
+    <string name="delete_take">Delete take</string>
+    <string name="delete_take_title">Delete take %1$d?</string>
+    <string name="delete_take_message">Its audio and video files are deleted. This cannot be undone.</string>
+    <string name="delete_track_title">Delete track %1$d?</string>
+    <string name="delete_track_message">All %1$d take(s) of this track and their files are deleted. This cannot be undone.</string>
+    <string name="delete">Delete</string>
 </resources>
