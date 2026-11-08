@@ -8,6 +8,7 @@ import io.github.higor0227.selfband.core.audio.EngineConfig
 import io.github.higor0227.selfband.core.audio.EngineOpenResult
 import io.github.higor0227.selfband.core.audio.EngineStatus
 import io.github.higor0227.selfband.core.audio.PlaybackTrack
+import io.github.higor0227.selfband.core.audio.PresentationClock
 import io.github.higor0227.selfband.core.audio.RecordChannelMode
 import io.github.higor0227.selfband.core.audio.RecordingResult
 import io.github.higor0227.selfband.core.audio.TransportState
@@ -182,6 +183,17 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
         inputDeviceId = this[ST_IN_DEVICE].toInt(),
         outputBufferFrames = this[ST_OUT_BUFFER].toInt(),
         outputBurstFrames = this[ST_OUT_BURST].toInt(),
+        presentationClock = if (this[ST_TRANSPORT].toInt() != 0 && this[ST_OUT_CLOCK_VALID] > 0) {
+            PresentationClock(
+                outputClockFrames = this[ST_OUT_CLOCK],
+                outputStartFrame = this[ST_OUTPUT_START].toLong(),
+                startPosition = this[ST_START_POSITION].toLong(),
+                sampleRate = this[ST_SAMPLE_RATE].toInt(),
+                estimated = this[ST_OUT_CLOCK_VALID] == 2.0,
+            )
+        } else {
+            null
+        },
     )
 
     private fun Double.toApi() = when (toInt()) {
@@ -223,7 +235,11 @@ internal class NativeAudioEngine @Inject constructor() : AudioEngine {
         const val ST_IN_DEVICE = 24
         const val ST_OUT_BUFFER = 25
         const val ST_OUT_BURST = 26
-        const val ST_COUNT = 27
+        const val ST_OUT_CLOCK = 27
+        const val ST_OUT_CLOCK_VALID = 28
+        const val ST_OUTPUT_START = 29
+        const val ST_START_POSITION = 30
+        const val ST_COUNT = 31
 
         const val REC_FRAMES = 0
         const val REC_CHANNELS = 1

@@ -4,7 +4,7 @@ Status against the phases in `SPEC.md` §4.
 
 ## Current phase: Phase 3 — Canvas and preview (in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates) and 3c (layer editing, background, guides/snap); 3a was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -269,3 +269,64 @@ Split into milestones (owner's choice): **1a** engine + recording + playback + m
 - Track names are still "Trilha N" by position; renaming tracks isn't in the SPEC for now.
 - The take dialog shows the take number by recording order; numbers shift after a deletion.
 - Deleting a track now also removes its folder. Empty folders left by tracks deleted before 2c stay (harmless).
+
+## Phase 3 — Canvas and preview
+**Decision (owner, 2026-11-08):** the canvas preview lives in the recorder screen for now (the top panel switches Camera / Canvas). `:feature:studio` stays a placeholder. The Studio/recorder split (SPEC 3.2) is postponed to Phase 7, because it needs the audio session moved out of the recorder. The layout editor (3c) will be its own screen.
+
+### 3a — Done (confirmed by owner on 2026-11-08)
+- **Model (`:core:model`):**
+  - `Project.canvas: CanvasSettings` (background color + user layers; additive, schema still 1).
+  - `Layer` with normalized coordinates (SPEC 3.5): frame on the canvas, crop of the displayed video, z, opacity, corner radius, border width/color, visible.
+  - `CanvasLayout`:
+    - auto-grid: picks the columns × rows that keep the most picture after a filling crop; empty cells count as loss; ties stack on portrait/square canvases and go side by side on landscape;
+    - centered incomplete last row;
+    - centered "cover" crop;
+    - `effectiveLayers(project)`: stored layer, or an automatic cell for tracks without one.
+  - Tests: `CanvasLayoutTest` (5).
+- **Presentation clock (`:core:audio`):**
+  - The engine status now carries `PresentationClock`: output timestamp clock + output frame and project frame where the transport started.
+  - `positionAt(t)` gives the project position being *heard* at CLOCK_MONOTONIC time t, through the same `AlignmentMath.projectPositionAt` used for video placement in 2a.
+  - Stable between the 50 ms status updates, so the video can evaluate it on every display frame.
+- **`:core:video`** (SPEC 3.1/3.5), public API `CanvasPreview` / `CanvasPreviewFactory` / `CanvasScene` / `PositionSource`:
+  - **Compositor:**
+    - OpenGL ES 3 on its own render thread; Choreographer drives it at the display rate.
+    - Recordable EGL config, so the same renderer can later feed the export encoder.
+    - One quad per layer. The shader handles the UV crop, the display rotation (the codec is told not to rotate), rounded corners with anti-aliasing, border and opacity.
+    - Background color; letterboxing outside the canvas.
+  - **Decoders:** one MediaCodec decoder thread per layer, rendering into a SurfaceTexture.
+    - Each vsync the compositor sets every layer's target media time from the audio clock, plus 3 vsyncs for display latency.
+    - A decoder renders the frame nearest the target; late frames are released without rendering (dropped), never waited for.
+    - Jumping back, or more than 1.5 s ahead, seeks to the previous sync frame.
+    - Only one frame is in flight per layer.
+    - Before the first frame the layer shows the first frame; past the end it holds the last frame.
+  - Pauses when the screen stops. A diagnostics line every 3 s while frames move (`canvas: pos=… shown=… dropped=…`).
+- **Recorder screen:**
+  - "Câmera / Canvas" chips above the panel. The camera keeps running under the canvas, so switching back is instant and never rebuilds the capture session.
+  - Starting a recording switches to Câmera.
+  - Canvas mode shows a playhead slider (time / length). Dragging it while stopped shows that moment.
+  - "Tocar" now starts from the playhead; after stopping, the playhead stays put (return to start). Recording still starts from 0.
+- **On the phone (S938B, "Música 1"):**
+  - With a fresh test track: 3 layers in a 2×2 grid with the last one centered.
+  - Playback at 30 fps, `shown=90` per 3 s with **0 dropped**.
+  - Scrubbing, Câmera↔Canvas, background and back: no crash. Almost no CPU in the background.
+  - The test track was deleted afterwards (and its folder removed). I also removed 3 empty folders left by my phase 2 test tracks.
+
+### Fixed during the 3a smoke test
+- The decoder kept re-seeking (141 frames shown per 3 s for 30 fps video, thousands dropped): the frame it holds for later, up to 1.5 frames ahead, was mistaken for "the clock went backwards". Backward seeks are now decided from the last frame actually shown.
+- The render loop kept running with the app in the background → paused on screen stop.
+
+### 3a checklist (owner)
+1. Open a project with 2+ video tracks recorded **after** 2a's timestamp fix (see note below) → "Canvas": the videos appear in a grid on a 9:16 canvas, upright and cropped to fill their cells.
+2. **Sync:** "Tocar" with the canvas visible. Each video follows its own audio (lips/hands match what you hear); none freezes or runs ahead. A clap test is the most precise check: record 2 tracks clapping on the metronome, then watch the claps in the canvas.
+3. **Playhead:** drag the slider while stopped: the videos jump to that moment. "Tocar" starts from there, and after Stop it goes back there.
+4. **Robustness:** switch Câmera ↔ Canvas during playback; leave the app and come back; record a new track while in Canvas (it switches to Câmera, and the new track joins the grid afterwards).
+5. Optional: `adb logcat -s Selfband:V` during playback: `dropped` should stay (almost) constant.
+6. Tell me whether the video looks early or late compared with the sound in the canvas. The display latency is an estimate (3 vsyncs) and is easy to adjust.
+
+### 3a known issues / notes
+- **Your two original takes in "Música 1"** were recorded before 2a's timestamp fix (their video start is ~33 h off). The canvas therefore shows their **last frame, frozen**. Re-record them, or record new tracks, to see them move.
+- The display latency compensation is a fixed estimate (TextureView composition + display). If the canvas looks consistently early or late, I can tune it, or measure it in Phase 7.
+- Video is not mirrored in the canvas (it is what the camera recorded). A per-layer "flip" can come with layer editing in 3c if you want selfie-style.
+- The recorder screen recomposes on every engine status update (~20×/s). With the camera preview this costs ~30% of a core on the main thread. It predates 3a; I'll optimize it in Phase 7 (UI).
+- No decoder-instance limit yet: proxies and the instance limit are Phase 6 (SPEC 3.5). On this phone 9 decoders should be fine; weaker phones may fail to start some layers (they then show a gray placeholder).
+

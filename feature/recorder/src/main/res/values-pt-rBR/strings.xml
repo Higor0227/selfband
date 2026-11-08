@@ -150,4 +150,8 @@
     <string name="delete_track_title">Excluir a trilha %1$d?</string>
     <string name="delete_track_message">Todos os %1$d take(s) desta trilha e os arquivos deles serão apagados. Não dá para desfazer.</string>
     <string name="delete">Excluir</string>
+    <!-- Canvas (fase 3a) -->
+    <string name="panel_camera">Câmera</string>
+    <string name="panel_canvas">Canvas</string>
+    <string name="canvas_no_video">Nenhuma trilha com vídeo ainda. Grave uma com a câmera ligada.</string>
 </resources>

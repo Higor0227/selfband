@@ -33,6 +33,7 @@ import io.github.higor0227.selfband.core.model.AudioDeviceType
 import io.github.higor0227.selfband.core.model.CalibrationMethod
 import io.github.higor0227.selfband.core.model.CameraLens
 import io.github.higor0227.selfband.core.model.CameraSettings
+import io.github.higor0227.selfband.core.model.CanvasLayout
 import io.github.higor0227.selfband.core.model.VideoResolution
 import io.github.higor0227.selfband.core.model.DeviceProfile
 import io.github.higor0227.selfband.core.model.InputChannel
@@ -53,6 +54,10 @@ import io.github.higor0227.selfband.core.camera.VideoCamera
 import io.github.higor0227.selfband.core.camera.VideoRecording
 import io.github.higor0227.selfband.core.project.DeviceProfileRepository
 import io.github.higor0227.selfband.core.project.ProjectRepository
+import io.github.higor0227.selfband.core.video.CanvasPreview
+import io.github.higor0227.selfband.core.video.CanvasPreviewFactory
+import io.github.higor0227.selfband.core.video.CanvasScene
+import io.github.higor0227.selfband.core.video.SceneLayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -143,6 +148,9 @@ data class SyncCheckUi(
     val error: SyncCheckError? = null,
 )
 
+/** What the panel above the tracks shows. */
+enum class PanelMode { CAMERA, CANVAS }
+
 data class RecorderUiState(
     val project: Project? = null,
     val status: EngineStatus = EngineStatus(),
@@ -168,6 +176,9 @@ data class RecorderUiState(
     val syncCheck: SyncCheckUi? = null,
     /** Track receiving the take being recorded (new track or a re-take). */
     val recordingTrackId: String? = null,
+    val panelMode: PanelMode = PanelMode.CAMERA,
+    /** Where playback starts and what the canvas shows while idle (project frames). */
+    val playheadFrames: Long = 0,
 ) {
     val cameraSettings: CameraSettings get() = project?.camera ?: CameraSettings()
     val transport: TransportState get() = status.transport
@@ -187,8 +198,13 @@ class RecorderViewModel @Inject constructor(
     private val profiles: DeviceProfileRepository,
     private val calibrator: LatencyCalibrator,
     private val camera: VideoCamera,
+    canvasFactory: CanvasPreviewFactory,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
+
+    /** Live canvas (SPEC 2.6/3.5); the screen attaches its surface. Released in onCleared. */
+    val canvasPreview: CanvasPreview = canvasFactory.create()
+    @Volatile private var playhead = 0L
 
     private val projectId: String = checkNotNull(savedStateHandle[ARG_PROJECT_ID])
     private val local = MutableStateFlow(RecorderUiState())
@@ -222,6 +238,16 @@ class RecorderViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecorderUiState())
 
     init {
+        // Canvas: the video follows the audio clock while the transport runs, else the playhead.
+        canvasPreview.setPosition { timeNanos ->
+            val s = engine.status.value
+            val clock = s.presentationClock
+            if (s.transport != TransportState.IDLE && clock != null) clock.positionAt(timeNanos) else playhead.toDouble()
+        }
+        viewModelScope.launch {
+            repository.observe(projectId).filterNotNull().map(::sceneOf).distinctUntilChanged()
+                .collect { canvasPreview.setScene(it) }
+        }
         // Ghost: load a still of the chosen track's active take whenever the choice changes.
         viewModelScope.launch {
             repository.observe(projectId).filterNotNull().map { p ->
@@ -264,12 +290,14 @@ class RecorderViewModel @Inject constructor(
 
     fun onStart() {
         screenActive = true
+        canvasPreview.setPaused(false)
         viewModelScope.launch { ops.withLock { openEngine() } }
         viewModelScope.launch { openCamera() }
     }
 
     fun onStop() {
         screenActive = false
+        canvasPreview.setPaused(true)
         viewModelScope.launch {
             ops.withLock { finishTake(engine.stop(), interrupted = true); engine.close() }
             camera.close()
@@ -282,6 +310,37 @@ class RecorderViewModel @Inject constructor(
             ops.withLock { finishTake(engine.stop(), interrupted = true); engine.close() }
             camera.close()
         }
+        canvasPreview.release()
+    }
+
+    // --- canvas (SPEC 2.6, 3.5) ----------------------------------------------------------
+
+    fun setPanelMode(mode: PanelMode) = local.update { it.copy(panelMode = mode) }
+
+    fun setPlayhead(frames: Long) {
+        val max = uiState.value.project?.lengthFrames ?: 0L
+        val clamped = frames.coerceIn(0L, max)
+        playhead = clamped
+        local.update { it.copy(playheadFrames = clamped) }
+    }
+
+    private fun sceneOf(project: Project): CanvasScene {
+        val tracks = project.tracks.associateBy { it.id }
+        val layers = CanvasLayout.effectiveLayers(project).mapNotNull { layer ->
+            val take = tracks[layer.trackId]?.activeTake ?: return@mapNotNull null
+            val video = take.video ?: return@mapNotNull null
+            SceneLayer(
+                file = repository.takeAudioFile(project.id, layer.trackId, video.file),
+                width = video.width,
+                height = video.height,
+                rotationDegrees = video.rotationDegrees,
+                frameRate = video.frameRate,
+                // Without a measured start, assume the video began with the take's audio.
+                startFrame = video.startFrame(project.sampleRate) ?: take.startFrame.toDouble(),
+                layer = layer,
+            )
+        }
+        return CanvasScene(project.aspectRatio, project.sampleRate, project.canvas.backgroundColor, layers)
     }
 
     // --- camera (SPEC 2.2, 3.4) ----------------------------------------------------------
@@ -486,7 +545,7 @@ class RecorderViewModel @Inject constructor(
             ops.withLock {
                 if (engine.status.value.transport == TransportState.IDLE) {
                     engine.setMetronome(currentProject().metronome, 0)
-                    engine.play(0)
+                    engine.play(playhead)
                 } else {
                     finishTake(engine.stop(), interrupted = false)
                 }
@@ -507,6 +566,8 @@ class RecorderViewModel @Inject constructor(
         viewModelScope.launch {
             ops.withLock {
                 if (engine.status.value.transport != TransportState.IDLE) return@withLock
+                // The performer needs to see the camera while recording.
+                local.update { it.copy(panelMode = PanelMode.CAMERA) }
                 val project = currentProject()
                 val existing = existingTrackId?.let { id -> project.tracks.firstOrNull { it.id == id } ?: return@withLock }
                 val trackId = existing?.id ?: UUID.randomUUID().toString()

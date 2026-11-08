@@ -143,6 +143,9 @@ fun RecorderRoute(onBack: () -> Unit, viewModel: RecorderViewModel = hiltViewMod
             onPickSyncFrame = viewModel::pickSyncFrame,
             onSetVideoOffset = viewModel::setVideoOffsetMs,
             onCloseSyncCheck = viewModel::closeSyncCheck,
+            canvas = viewModel.canvasPreview,
+            onPanelMode = viewModel::setPanelMode,
+            onPlayhead = viewModel::setPlayhead,
         ),
         cameraSettings = CameraSettingsActions(
             onResolution = viewModel::setResolution,
@@ -245,9 +248,12 @@ fun RecorderScreen(
             CameraPanel(
                 state = state,
                 ghostOpacity = ghostOpacity,
+                canvas = video.canvas,
                 onPreviewSurface = video.onPreviewSurface,
                 onSwitchLens = video.onSwitchLens,
                 onVideoEnabled = video.onVideoEnabled,
+                onPanelMode = video.onPanelMode,
+                onPlayhead = video.onPlayhead,
             )
         }
         LazyColumn(
@@ -651,7 +657,7 @@ private fun RecorderNotice.textRes() = when (this) {
 }
 
 /** m:ss.mmm; negative during count-in. */
-private fun formatTime(frames: Long, sampleRate: Int): String {
+internal fun formatTime(frames: Long, sampleRate: Int): String {
     val sign = if (frames < 0) "-" else ""
     val totalMs = kotlin.math.abs(frames) * 1000 / sampleRate.coerceAtLeast(1)
     return sign + String.format(Locale.ROOT, "%d:%02d.%03d", totalMs / 60_000, (totalMs / 1000) % 60, totalMs % 1000)
@@ -664,7 +670,7 @@ data class TakeActions(
     val onDeleteTake: (trackId: String, takeId: String) -> Unit,
 )
 
-/** Callbacks for the camera panel and the sync check. */
+/** Callbacks for the camera/canvas panel and the sync check. */
 data class VideoActions(
     val onPreviewSurface: (android.view.Surface?) -> Unit,
     val onSwitchLens: () -> Unit,
@@ -673,6 +679,9 @@ data class VideoActions(
     val onPickSyncFrame: (Int) -> Unit,
     val onSetVideoOffset: (String, Double) -> Unit,
     val onCloseSyncCheck: () -> Unit,
+    val canvas: io.github.higor0227.selfband.core.video.CanvasPreview,
+    val onPanelMode: (PanelMode) -> Unit,
+    val onPlayhead: (Long) -> Unit,
 )
 
 /** Callbacks for the device card and the calibration dialog. */

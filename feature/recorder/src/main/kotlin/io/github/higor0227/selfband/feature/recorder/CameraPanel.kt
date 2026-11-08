@@ -20,7 +20,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,16 +48,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.github.higor0227.selfband.core.camera.PixelSize
 import io.github.higor0227.selfband.core.model.CameraLens
+import io.github.higor0227.selfband.core.model.value
+import io.github.higor0227.selfband.core.video.CanvasPreview
 import kotlin.math.min
 
-/** Camera preview (with grid and ghost) and the main video switches, above the track list. */
+/**
+ * Panel above the track list: the camera preview (with grid and ghost) and the main video
+ * switches, or the live canvas (SPEC 2.6) with a playhead. The camera keeps running under the
+ * canvas so switching back is instant and the capture session is never rebuilt.
+ */
 @Composable
 fun CameraPanel(
     state: RecorderUiState,
     ghostOpacity: Float,
+    canvas: CanvasPreview,
     onPreviewSurface: (Surface?) -> Unit,
     onSwitchLens: () -> Unit,
     onVideoEnabled: (Boolean) -> Unit,
+    onPanelMode: (PanelMode) -> Unit,
+    onPlayhead: (Long) -> Unit,
 ) {
     val configuration = LocalConfiguration.current
     val landscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -88,6 +99,16 @@ fun CameraPanel(
                     onSurface = onPreviewSurface,
                 )
             }
+            if (state.panelMode == PanelMode.CANVAS) {
+                Box(Modifier.matchParentSize().background(Color.Black), contentAlignment = Alignment.Center) {
+                    val project = state.project
+                    if (project != null && project.tracks.any { it.activeTake?.video != null }) {
+                        CanvasSurface(canvas, project.aspectRatio.value)
+                    } else {
+                        PanelMessage(stringResource(R.string.canvas_no_video))
+                    }
+                }
+            }
             if (cam.recording) {
                 Box(
                     Modifier.align(Alignment.TopStart).padding(8.dp).width(12.dp).height(12.dp)
@@ -96,6 +117,24 @@ fun CameraPanel(
             }
         }
         Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = state.panelMode == PanelMode.CAMERA,
+                onClick = { onPanelMode(PanelMode.CAMERA) },
+                label = { Text(stringResource(R.string.panel_camera)) },
+            )
+            FilterChip(
+                selected = state.panelMode == PanelMode.CANVAS,
+                onClick = { onPanelMode(PanelMode.CANVAS) },
+                label = { Text(stringResource(R.string.panel_canvas)) },
+            )
+        }
+        if (state.panelMode == PanelMode.CANVAS) {
+            PlayheadRow(state, onPlayhead)
+        } else Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -121,6 +160,56 @@ fun CameraPanel(
                 Text(stringResource(R.string.switch_camera, stringResource(settings.lens.labelRes())))
             }
         }
+    }
+}
+
+/** Playhead: where playback starts and which frame the canvas shows while stopped. */
+@Composable
+private fun PlayheadRow(state: RecorderUiState, onPlayhead: (Long) -> Unit) {
+    val project = state.project ?: return
+    val length = project.lengthFrames
+    val position = if (state.isIdle) state.playheadFrames else state.status.positionFrames
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(formatTime(position.coerceAtLeast(0), project.sampleRate), style = MaterialTheme.typography.labelMedium)
+        Slider(
+            value = if (length > 0) (position.toFloat() / length).coerceIn(0f, 1f) else 0f,
+            onValueChange = { onPlayhead((it * length).toLong()) },
+            enabled = state.isIdle && length > 0,
+            modifier = Modifier.weight(1f),
+        )
+        Text(formatTime(length, project.sampleRate), style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+/** TextureView the canvas compositor draws into, at the project's aspect ratio. */
+@Composable
+private fun CanvasSurface(canvas: CanvasPreview, aspect: Float) {
+    Box(Modifier.aspectRatio(aspect, matchHeightConstraintsFirst = true)) {
+        AndroidView(
+            factory = { ctx ->
+                TextureView(ctx).apply {
+                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                        private var surface: Surface? = null
+                        override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
+                            surface = Surface(st).also { canvas.attach(it, w, h) }
+                        }
+                        override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) = canvas.resize(w, h)
+                        override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+                            canvas.detach()
+                            surface?.release()
+                            surface = null
+                            return true
+                        }
+                        override fun onSurfaceTextureUpdated(st: SurfaceTexture) = Unit
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

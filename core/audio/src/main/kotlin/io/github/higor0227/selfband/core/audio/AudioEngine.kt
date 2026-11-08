@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.core.audio
 
+import io.github.higor0227.selfband.core.model.AlignmentMath
 import io.github.higor0227.selfband.core.model.MetronomeSettings
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
@@ -102,7 +103,26 @@ data class EngineStatus(
     val outputBurstFrames: Int = 0,
     /** Post-gain output peak per track, in the order of the last setTracks() list. */
     val trackPeaks: List<Float> = emptyList(),
+    /** Set while the transport runs and the output clock is known. */
+    val presentationClock: PresentationClock? = null,
 )
+
+/**
+ * Maps CLOCK_MONOTONIC time to the project position being heard (SPEC 3.4/3.5): the video
+ * preview follows this clock. Stable while the transport runs without glitches, so it can be
+ * evaluated at every display frame although the status refreshes only every ~50 ms.
+ */
+data class PresentationClock(
+    val outputClockFrames: Double,
+    val outputStartFrame: Long,
+    val startPosition: Long,
+    val sampleRate: Int,
+    /** True when derived from the buffer size (no output timestamps): approximate. */
+    val estimated: Boolean,
+) {
+    fun positionAt(timeNanos: Long): Double =
+        AlignmentMath.projectPositionAt(timeNanos, outputClockFrames, outputStartFrame, startPosition, sampleRate)
+}
 
 data class RecordingResult(
     val frames: Long,

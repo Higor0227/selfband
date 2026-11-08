@@ -800,6 +800,15 @@ void AudioEngine::fillStatus(double *o, int32_t capacity) {
     o[kEsInDeviceId] = mInput->getDeviceId();
     o[kEsOutBufferFrames] = mOutput->getBufferSizeInFrames();
     o[kEsOutBurst] = mOutput->getFramesPerBurst();
+    if (mClkCount > 0) {
+        double sorted[kIoWindow];
+        std::copy(mClkSamples, mClkSamples + mClkCount, sorted);
+        std::sort(sorted, sorted + mClkCount);
+        o[kEsOutClock] = sorted[mClkCount / 2];
+        o[kEsOutClockValid] = mClkEstimated ? 2.0 : 1.0;
+    }
+    o[kEsOutputStart] = static_cast<double>(mRecOutStart.load());
+    o[kEsStartPosition] = static_cast<double>(mStartPosition.load());
 }
 
 } // namespace selfband

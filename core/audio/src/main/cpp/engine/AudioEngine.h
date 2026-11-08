@@ -45,6 +45,13 @@ enum EngineStat : int32_t {
     kEsInDeviceId,
     kEsOutBufferFrames,
     kEsOutBurst,
+    // Presentation clock (the video preview follows it): the project frame heard at
+    // CLOCK_MONOTONIC time t is startPosition + t * sr / 1e9 - outClock - outputStart
+    // (see AlignmentMath.projectPositionAt).
+    kEsOutClock,           // median of t_out * sr / 1e9 - pos_out
+    kEsOutClockValid,      // 1 = from timestamps, 2 = estimated, 0 = none
+    kEsOutputStart,        // output frame that played the transport's first frame
+    kEsStartPosition,      // project frame the transport started from
     kEsCount
 };
 

@@ -149,4 +149,8 @@
     <string name="delete_track_title">Delete track %1$d?</string>
     <string name="delete_track_message">All %1$d take(s) of this track and their files are deleted. This cannot be undone.</string>
     <string name="delete">Delete</string>
+    <!-- Canvas (phase 3a) -->
+    <string name="panel_camera">Camera</string>
+    <string name="panel_canvas">Canvas</string>
+    <string name="canvas_no_video">No track with video yet. Record one with the camera on.</string>
 </resources>
