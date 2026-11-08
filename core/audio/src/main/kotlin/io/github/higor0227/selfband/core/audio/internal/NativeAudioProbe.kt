@@ -101,7 +101,10 @@ internal class NativeAudioProbe @Inject constructor() : AudioProbe {
     }
 
     // Field indices: must match StatField in probe/AudioProbe.h.
-    private companion object {
+    companion object {
+        /** Human-readable text for an oboe::Result code. */
+        fun resultText(code: Int): String = nativeResultText(code)
+
         const val OPEN = 0
         const val API = 1
         const val SAMPLE_RATE = 2

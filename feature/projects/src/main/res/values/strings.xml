@@ -2,6 +2,18 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <resources>
     <string name="projects_title">Projects</string>
-    <string name="projects_empty">No projects yet.</string>
+    <string name="projects_empty">No projects yet. Tap \"New project\" to start.</string>
     <string name="open_diagnostics">Audio diagnostics</string>
+    <string name="new_project">New project</string>
+    <string name="project_name">Name</string>
+    <string name="default_project_name">Song %1$d</string>
+    <string name="create">Create</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="delete_project_title">Delete project?</string>
+    <string name="delete_project_message">\"%1$s\" and all its recordings will be permanently deleted.</string>
+    <plurals name="track_count">
+        <item quantity="one">%1$d track</item>
+        <item quantity="other">%1$d tracks</item>
+    </plurals>
 </resources>

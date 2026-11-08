@@ -31,7 +31,9 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:ui"))
     implementation(project(":core:audio"))
+    implementation(project(":core:project"))
     implementation(project(":feature:projects"))
+    implementation(project(":feature:recorder"))
     implementation(project(":feature:settings"))
 
     implementation(libs.androidx.core.ktx)

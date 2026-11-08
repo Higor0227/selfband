@@ -47,4 +47,15 @@
     <string name="xruns">Xruns</string>
     <string name="callbacks">Callbacks</string>
     <string name="level">Level</string>
+    <string name="section_profiles">Device profiles (%1$d)</string>
+    <string name="no_profiles">No profiles yet. Calibrate or change an input setting in the recorder to create one.</string>
+    <string name="profile_calibrated">Calibrated latency</string>
+    <string name="profile_none">not measured</string>
+    <string name="profile_leak">Playback leak</string>
+    <string name="profile_leak_yes">yes (%1$s dB)</string>
+    <string name="profile_leak_no">no</string>
+    <string name="profile_input">Input</string>
+    <string name="profile_monitoring_on">monitoring on</string>
+    <string name="profile_monitoring_off">monitoring off</string>
+    <string name="delete_profile">Delete profile</string>
 </resources>

@@ -6,6 +6,7 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import io.github.higor0227.selfband.core.audio.AudioDeviceMonitor
+import io.github.higor0227.selfband.core.audio.AudioEngine
 import io.github.higor0227.selfband.core.audio.AudioProbe
 
 @Module
@@ -16,4 +17,7 @@ internal abstract class AudioModule {
 
     @Binds
     abstract fun bindAudioProbe(impl: NativeAudioProbe): AudioProbe
+
+    @Binds
+    abstract fun bindAudioEngine(impl: NativeAudioEngine): AudioEngine
 }

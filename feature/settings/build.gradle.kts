@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     implementation(project(":core:audio"))
+    implementation(project(":core:project"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
 }

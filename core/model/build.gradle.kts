@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 plugins {
     alias(libs.plugins.selfband.jvm.library)
+    alias(libs.plugins.kotlin.serialization)
+}
+
+dependencies {
+    api(libs.kotlinx.serialization.json)
 }

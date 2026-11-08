@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.higor0227.selfband.core.audio.AudioApi
 import io.github.higor0227.selfband.core.audio.StreamStats
 import io.github.higor0227.selfband.core.model.AudioDevice
+import io.github.higor0227.selfband.core.model.DeviceProfile
 import io.github.higor0227.selfband.core.ui.component.KeyValueRow
 import io.github.higor0227.selfband.core.ui.component.LevelMeter
 import io.github.higor0227.selfband.core.ui.component.SectionHeader
@@ -68,6 +70,7 @@ fun DiagnosticsRoute(
         permissionDenied = permissionDenied,
         onBack = onBack,
         onToggleProbe = viewModel::toggleProbe,
+        onDeleteProfile = viewModel::deleteProfile,
         onIncludeInputChange = { include ->
             val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
@@ -88,6 +91,7 @@ fun DiagnosticsScreen(
     onBack: () -> Unit,
     onToggleProbe: () -> Unit,
     onIncludeInputChange: (Boolean) -> Unit,
+    onDeleteProfile: (String) -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -114,6 +118,11 @@ fun DiagnosticsScreen(
             items(outputs, key = { "out-${it.id}" }) { DeviceCard(it) }
             item { SectionHeader(stringResource(R.string.section_inputs, inputs.size)) }
             items(inputs, key = { "in-${it.id}" }) { DeviceCard(it) }
+            item { SectionHeader(stringResource(R.string.section_profiles, state.profiles.size)) }
+            if (state.profiles.isEmpty()) {
+                item { Text(stringResource(R.string.no_profiles), style = MaterialTheme.typography.bodySmall) }
+            }
+            items(state.profiles, key = { "profile-${it.key}" }) { ProfileCard(it, onDeleteProfile) }
         }
     }
 }
@@ -266,3 +275,40 @@ private fun DeviceCard(device: AudioDevice) {
 private fun yesNo(value: Boolean) = stringResource(if (value) R.string.yes else R.string.no)
 
 private fun fmtMs(ms: Double) = String.format(Locale.ROOT, "%.1f ms", ms)
+
+/** Saved per-route data: calibrated latency, leak test, input choices (SPEC 2.4). */
+@Composable
+private fun ProfileCard(profile: DeviceProfile, onDelete: (String) -> Unit) {
+    val f = { v: Double -> String.format(Locale.ROOT, "%.1f", v) }
+    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("${profile.outputLabel} \u2192 ${profile.inputLabel}", style = MaterialTheme.typography.titleSmall)
+                val c = profile.calibration
+                KeyValueRow(
+                    stringResource(R.string.profile_calibrated),
+                    if (c == null) stringResource(R.string.profile_none)
+                    else "${f(c.roundTripMs)} ms (${f(c.residualMs)} \u00b1 ${f(c.spreadMs)}, ${c.method.name.lowercase()})",
+                )
+                val leak = profile.leak
+                KeyValueRow(
+                    stringResource(R.string.profile_leak),
+                    when {
+                        leak == null -> stringResource(R.string.profile_none)
+                        leak.detected -> stringResource(R.string.profile_leak_yes, f(leak.levelDb ?: 0.0))
+                        else -> stringResource(R.string.profile_leak_no)
+                    },
+                )
+                KeyValueRow(
+                    stringResource(R.string.profile_input),
+                    "${profile.inputChannel?.name?.lowercase() ?: "-"} \u00b7 ${String.format(Locale.ROOT, "%+.0f dB", profile.inputGainDb)}" +
+                        " \u00b7 ${stringResource(if (profile.monitoring) R.string.profile_monitoring_on else R.string.profile_monitoring_off)}" +
+                        (if (profile.lastSampleRate > 0) " \u00b7 ${profile.lastSampleRate} Hz" else ""),
+                )
+            }
+            IconButton(onClick = { onDelete(profile.key) }) {
+                Icon(Icons.Filled.Delete, stringResource(R.string.delete_profile))
+            }
+        }
+    }
+}

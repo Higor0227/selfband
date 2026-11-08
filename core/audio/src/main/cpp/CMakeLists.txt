@@ -6,7 +6,10 @@ find_package(oboe REQUIRED CONFIG)
 
 add_library(selfband_audio SHARED
         jni_bridge.cpp
+        jni_engine.cpp
         probe/AudioProbe.cpp
+        engine/AudioEngine.cpp
+        engine/WavFile.cpp
 )
 
 target_include_directories(selfband_audio PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

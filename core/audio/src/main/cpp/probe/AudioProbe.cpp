@@ -39,6 +39,12 @@ oboe::DataCallbackResult AudioProbe::StreamCallback::onAudioReady(
     return oboe::DataCallbackResult::Continue;
 }
 
+// Called before Oboe closes the stream after an error: stop querying it from now on.
+bool AudioProbe::StreamCallback::onError(oboe::AudioStream * /*stream*/, oboe::Result /*error*/) {
+    disconnected.store(true, std::memory_order_relaxed);
+    return false;
+}
+
 // Called on a separate Oboe-owned thread after the stream has been closed.
 void AudioProbe::StreamCallback::onErrorAfterClose(oboe::AudioStream * /*stream*/,
                                                    oboe::Result error) {
@@ -185,7 +191,9 @@ void AudioProbe::fillStreamStats(oboe::AudioStream *stream, const StreamCallback
     out[kStatCallbacks] = static_cast<double>(cb.callbacks.load());
     out[kStatFrames] = static_cast<double>(cb.frames.load());
     out[kStatPeak] = cb.peak.load();
-    if (stream == nullptr || stream->getState() == oboe::StreamState::Closed) return;
+    // A stream the system closed (device unplugged) must not be queried any further.
+    if (stream == nullptr || cb.disconnected.load() ||
+        stream->getState() == oboe::StreamState::Closed) return;
 
     out[kStatOpen] = 1.0;
     out[kStatApi] = static_cast<double>(stream->getAudioApi());

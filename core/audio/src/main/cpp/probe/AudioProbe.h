@@ -72,6 +72,7 @@ private:
 
         oboe::DataCallbackResult onAudioReady(oboe::AudioStream *stream, void *audioData,
                                               int32_t numFrames) override;
+        bool onError(oboe::AudioStream *stream, oboe::Result error) override;
         void onErrorAfterClose(oboe::AudioStream *stream, oboe::Result error) override;
 
         void reset();

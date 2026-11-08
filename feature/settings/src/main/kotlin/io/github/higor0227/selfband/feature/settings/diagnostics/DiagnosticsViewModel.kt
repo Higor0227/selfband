@@ -13,6 +13,8 @@ import io.github.higor0227.selfband.core.audio.ProbeSnapshot
 import io.github.higor0227.selfband.core.audio.ProbeStartResult
 import io.github.higor0227.selfband.core.model.AudioDevice
 import io.github.higor0227.selfband.core.model.AudioSystemInfo
+import io.github.higor0227.selfband.core.model.DeviceProfile
+import io.github.higor0227.selfband.core.project.DeviceProfileRepository
 import io.github.higor0227.selfband.core.model.LOG_TAG
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
@@ -40,12 +42,14 @@ data class DiagnosticsUiState(
     val system: AudioSystemInfo,
     val devices: List<AudioDevice>,
     val probe: ProbeUiState,
+    val profiles: List<DeviceProfile> = emptyList(),
 )
 
 @HiltViewModel
 class DiagnosticsViewModel @Inject constructor(
     private val deviceMonitor: AudioDeviceMonitor,
     private val probe: AudioProbe,
+    private val profileRepository: DeviceProfileRepository,
 ) : ViewModel() {
 
     private val systemInfo = deviceMonitor.systemInfo()
@@ -58,13 +62,17 @@ class DiagnosticsViewModel @Inject constructor(
     private var pollJob: Job? = null
 
     val uiState: StateFlow<DiagnosticsUiState> =
-        combine(deviceMonitor.devices, probeState) { devices, probe ->
-            DiagnosticsUiState(systemInfo, devices, probe)
+        combine(deviceMonitor.devices, probeState, profileRepository.profiles) { devices, probe, profiles ->
+            DiagnosticsUiState(systemInfo, devices, probe, profiles)
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),
             DiagnosticsUiState(systemInfo, deviceMonitor.devices.value, probeState.value),
         )
+
+    fun deleteProfile(key: String) {
+        viewModelScope.launch { profileRepository.delete(key) }
+    }
 
     fun setIncludeInput(include: Boolean) {
         probeState.update { it.copy(withInput = include) }

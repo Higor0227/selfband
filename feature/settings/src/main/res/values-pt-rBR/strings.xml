@@ -47,4 +47,15 @@
     <string name="xruns">Xruns</string>
     <string name="callbacks">Callbacks</string>
     <string name="level">Nível</string>
+    <string name="section_profiles">Perfis de dispositivo (%1$d)</string>
+    <string name="no_profiles">Nenhum perfil ainda. Calibre ou mude uma opção de entrada no gravador para criar um.</string>
+    <string name="profile_calibrated">Latência calibrada</string>
+    <string name="profile_none">não medido</string>
+    <string name="profile_leak">Vazamento do playback</string>
+    <string name="profile_leak_yes">sim (%1$s dB)</string>
+    <string name="profile_leak_no">não</string>
+    <string name="profile_input">Entrada</string>
+    <string name="profile_monitoring_on">monitoramento ligado</string>
+    <string name="profile_monitoring_off">monitoramento desligado</string>
+    <string name="delete_profile">Excluir perfil</string>
 </resources>
