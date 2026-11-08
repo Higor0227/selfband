@@ -121,4 +121,17 @@
     <string name="sync_no_timestamp">This video has no timestamp to align it with the audio.</string>
     <string name="sync_out_of_range">The loudest sound of the take is outside the video.</string>
     <string name="sync_decode">Could not read the video frames.</string>
+    <!-- Camera settings (phase 2b) -->
+    <string name="camera_settings">Camera</string>
+    <string name="grid">Grid</string>
+    <string name="stabilization">Stabilization</string>
+    <string name="lock_exposure">Lock exposure</string>
+    <string name="lock_white_balance">Lock white balance</string>
+    <string name="lock_focus">Lock focus</string>
+    <string name="locks_hint">A lock keeps the current value, saved per camera, so the next tracks look the same. Tap again for automatic.</string>
+    <string name="locks_session_hint">* This camera can only hold that lock while it stays open; it is applied again (re-measured) when you come back.</string>
+    <string name="ghost">Ghost</string>
+    <string name="ghost_none">None</string>
+    <string name="ghost_opacity">Opacity</string>
+    <string name="ghost_hint">Shows a previous track over the preview to repeat its framing. It is not recorded.</string>
 </resources>

@@ -6,6 +6,8 @@ import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,7 +33,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -42,10 +48,11 @@ import io.github.higor0227.selfband.core.camera.PixelSize
 import io.github.higor0227.selfband.core.model.CameraLens
 import kotlin.math.min
 
-/** Camera preview and video controls above the track list. */
+/** Camera preview (with grid and ghost) and the main video switches, above the track list. */
 @Composable
 fun CameraPanel(
     state: RecorderUiState,
+    ghostOpacity: Float,
     onPreviewSurface: (Surface?) -> Unit,
     onSwitchLens: () -> Unit,
     onVideoEnabled: (Boolean) -> Unit,
@@ -54,19 +61,32 @@ fun CameraPanel(
     val landscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val height = (configuration.screenHeightDp * if (landscape) 0.45f else 0.32f).dp
     val cam = state.camera
+    val settings = state.cameraSettings
     Column(Modifier.fillMaxWidth()) {
         Box(
             Modifier.fillMaxWidth().height(height).background(Color.Black),
             contentAlignment = Alignment.Center,
         ) {
-            val previewSize = cam.previewSize
+            // While the camera reopens (lens or format change) keep the view and its surface,
+            // so the preview does not flash and the session can reuse the surface.
+            var lastGeometry by remember { mutableStateOf<Pair<PixelSize, Int>?>(null) }
+            val openSize = cam.previewSize
+            if (cam.isOpen && openSize != null) lastGeometry = openSize to cam.sensorOrientation
+            val geometry = lastGeometry
             val error = cam.error
             when {
                 !state.cameraPermission -> PanelMessage(stringResource(R.string.camera_permission_needed))
                 !state.videoEnabled -> PanelMessage(stringResource(R.string.video_off))
                 error != null && !cam.isOpen -> PanelMessage(stringResource(R.string.camera_error, error))
-                !cam.isOpen || previewSize == null -> PanelMessage(stringResource(R.string.camera_opening))
-                else -> CameraPreview(previewSize, cam.sensorOrientation, onPreviewSurface)
+                geometry == null -> PanelMessage(stringResource(R.string.camera_opening))
+                else -> CameraPreview(
+                    previewSize = geometry.first,
+                    sensorOrientation = geometry.second,
+                    grid = settings.grid,
+                    ghost = state.ghost,
+                    ghostOpacity = ghostOpacity,
+                    onSurface = onPreviewSurface,
+                )
             }
             if (cam.recording) {
                 Box(
@@ -90,7 +110,7 @@ fun CameraPanel(
             if (state.videoEnabled && cam.isOpen) {
                 val size = cam.videoSize
                 Text(
-                    (size?.let { "${it.width}×${it.height} · " } ?: "") + "${cam.frameRate} fps",
+                    (size?.let { "${it.height}p · " } ?: "") + "${cam.frameRate} fps",
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -98,7 +118,7 @@ fun CameraPanel(
                 onClick = onSwitchLens,
                 enabled = state.isIdle && state.videoEnabled && state.availableLenses.size > 1,
             ) {
-                Text(stringResource(R.string.switch_camera, stringResource(state.lens.labelRes())))
+                Text(stringResource(R.string.switch_camera, stringResource(settings.lens.labelRes())))
             }
         }
     }
@@ -118,10 +138,17 @@ private fun PanelMessage(text: String) {
 /**
  * TextureView preview. Camera2 already rotates (and, for the front camera, mirrors) the
  * preview into the display's natural orientation; this only compensates the current display
- * rotation and keeps the aspect ratio.
+ * rotation and keeps the aspect ratio. Grid and ghost are drawn over the same area.
  */
 @Composable
-private fun CameraPreview(previewSize: PixelSize, sensorOrientation: Int, onSurface: (Surface?) -> Unit) {
+private fun CameraPreview(
+    previewSize: PixelSize,
+    sensorOrientation: Int,
+    grid: Boolean,
+    ghost: GhostUi?,
+    ghostOpacity: Float,
+    onSurface: (Surface?) -> Unit,
+) {
     var texture by remember { mutableStateOf<SurfaceTexture?>(null) }
     val currentOnSurface by rememberUpdatedState(onSurface)
     val rotationDegrees = (LocalView.current.display?.rotation ?: Surface.ROTATION_0) * 90
@@ -131,27 +158,42 @@ private fun CameraPreview(previewSize: PixelSize, sensorOrientation: Int, onSurf
     val ch = if (swapped) previewSize.width else previewSize.height
     val displayed = if (rotationDegrees % 180 == 90) ch.toFloat() / cw else cw.toFloat() / ch
 
-    AndroidView(
-        factory = { ctx ->
-            TextureView(ctx).apply {
-                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                    override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) { texture = st }
-                    override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) = applyPreviewTransform()
-                    override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
-                        texture = null
-                        return true
+    Box(Modifier.aspectRatio(displayed, matchHeightConstraintsFirst = true)) {
+        AndroidView(
+            factory = { ctx ->
+                TextureView(ctx).apply {
+                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                        override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) { texture = st }
+                        override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) = applyPreviewTransform()
+                        override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+                            texture = null
+                            return true
+                        }
+                        override fun onSurfaceTextureUpdated(st: SurfaceTexture) = Unit
                     }
-                    override fun onSurfaceTextureUpdated(st: SurfaceTexture) = Unit
+                    addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> (v as TextureView).applyPreviewTransform() }
                 }
-                addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> (v as TextureView).applyPreviewTransform() }
-            }
-        },
-        update = { view ->
-            view.tag = PreviewGeometry(cw, ch, rotationDegrees)
-            view.applyPreviewTransform()
-        },
-        modifier = Modifier.aspectRatio(displayed, matchHeightConstraintsFirst = true).fillMaxSize(),
-    )
+            },
+            update = { view ->
+                view.tag = PreviewGeometry(cw, ch, rotationDegrees)
+                view.applyPreviewTransform()
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (ghost != null) {
+            Image(
+                ghost.bitmap.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().graphicsLayer {
+                    alpha = ghostOpacity
+                    // Shown the way that track looked in its own preview.
+                    scaleX = if (ghost.mirrored) -1f else 1f
+                },
+            )
+        }
+        if (grid) GridOverlay()
+    }
 
     DisposableEffect(texture, previewSize) {
         val st = texture
@@ -160,6 +202,21 @@ private fun CameraPreview(previewSize: PixelSize, sensorOrientation: Int, onSurf
             currentOnSurface(Surface(st))
         }
         onDispose { if (st != null) currentOnSurface(null) }
+    }
+}
+
+/** Rule-of-thirds framing grid. */
+@Composable
+private fun GridOverlay() {
+    Canvas(Modifier.fillMaxSize()) {
+        val color = Color.White.copy(alpha = 0.5f)
+        val stroke = 1.dp.toPx()
+        for (i in 1..2) {
+            val x = size.width * i / 3
+            val y = size.height * i / 3
+            drawLine(color, Offset(x, 0f), Offset(x, size.height), stroke)
+            drawLine(color, Offset(0f, y), Offset(size.width, y), stroke)
+        }
     }
 }
 

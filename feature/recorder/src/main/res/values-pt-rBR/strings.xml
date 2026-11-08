@@ -122,4 +122,17 @@
     <string name="sync_no_timestamp">Este vídeo não tem marca de tempo para alinhá-lo ao áudio.</string>
     <string name="sync_out_of_range">O som mais alto do take está fora do vídeo.</string>
     <string name="sync_decode">Não foi possível ler os quadros do vídeo.</string>
+    <!-- Ajustes da câmera (fase 2b) -->
+    <string name="camera_settings">Câmera</string>
+    <string name="grid">Grade</string>
+    <string name="stabilization">Estabilização</string>
+    <string name="lock_exposure">Travar exposição</string>
+    <string name="lock_white_balance">Travar balanço de branco</string>
+    <string name="lock_focus">Travar foco</string>
+    <string name="locks_hint">A trava guarda o valor atual, salvo por câmera, para as próximas trilhas ficarem com a mesma aparência. Toque de novo para voltar ao automático.</string>
+    <string name="locks_session_hint">* Esta câmera só consegue manter essa trava enquanto estiver aberta; ao voltar, ela é aplicada de novo (medindo outra vez).</string>
+    <string name="ghost">Fantasma</string>
+    <string name="ghost_none">Nenhum</string>
+    <string name="ghost_opacity">Opacidade</string>
+    <string name="ghost_hint">Mostra uma trilha anterior sobre a prévia para repetir o enquadramento. Não é gravado.</string>
 </resources>

@@ -144,6 +144,16 @@ fun RecorderRoute(onBack: () -> Unit, viewModel: RecorderViewModel = hiltViewMod
             onSetVideoOffset = viewModel::setVideoOffsetMs,
             onCloseSyncCheck = viewModel::closeSyncCheck,
         ),
+        cameraSettings = CameraSettingsActions(
+            onResolution = viewModel::setResolution,
+            onFrameRate = viewModel::setFrameRate,
+            onStabilization = viewModel::setStabilization,
+            onGrid = viewModel::setGrid,
+            onToggleLock = viewModel::toggleLock,
+            onGhostTrack = viewModel::setGhostTrack,
+            onPreviewGhostOpacity = {},
+            onSetGhostOpacity = viewModel::setGhostOpacity,
+        ),
     )
 }
 
@@ -167,7 +177,12 @@ fun RecorderScreen(
     onDismissNotice: () -> Unit,
     device: DeviceActions,
     video: VideoActions,
+    cameraSettings: CameraSettingsActions,
 ) {
+    // Ghost opacity follows the slider live; it is saved when the slider is released.
+    val savedOpacity = state.cameraSettings.ghostOpacity
+    var ghostOpacity by remember(savedOpacity) { mutableFloatStateOf(savedOpacity) }
+    val settingsActions = cameraSettings.copy(onPreviewGhostOpacity = { ghostOpacity = it })
     val recording = state.transport == TransportState.RECORDING
     KeepScreenOnAndLockRotation(recording)
 
@@ -223,6 +238,7 @@ fun RecorderScreen(
         if (permissionGranted) {
             CameraPanel(
                 state = state,
+                ghostOpacity = ghostOpacity,
                 onPreviewSurface = video.onPreviewSurface,
                 onSwitchLens = video.onSwitchLens,
                 onVideoEnabled = video.onVideoEnabled,
@@ -256,6 +272,7 @@ fun RecorderScreen(
                     onRecord((view.display?.rotation ?: android.view.Surface.ROTATION_0) * 90)
                 }, onStop)
             }
+            item { CameraSettingsCard(state, ghostOpacity, settingsActions) }
             state.project?.let { project ->
                 item { MetronomeCard(project.metronome, onUpdateMetronome, onTapTempo) }
             }
@@ -348,7 +365,9 @@ private fun TransportCard(
             }
             val audioBytesPerSecond = sampleRate.toLong() * 4 * if (state.channelMode == RecordChannelMode.STEREO && s.inputChannels >= 2) 2 else 1
             // Video at the encoder's bit rate (16 Mbit/s for 1080p30).
-            val videoBytesPerSecond = if (state.videoEnabled && state.camera.isOpen) 2_000_000L else 0L
+            val videoBytesPerSecond = if (state.videoEnabled && state.camera.isOpen) {
+                state.cameraSettings.resolution.bitRate(state.camera.frameRate) / 8L
+            } else 0L
             val bytesPerSecond = audioBytesPerSecond + videoBytesPerSecond
             val remainingSec = if (bytesPerSecond > 0) state.freeBytes / bytesPerSecond else 0
             Text(

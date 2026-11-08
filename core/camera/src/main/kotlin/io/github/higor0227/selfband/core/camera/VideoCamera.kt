@@ -20,6 +20,15 @@ interface VideoCamera {
     /** Lenses present on this device, as reported by the platform. */
     fun availableLenses(): List<CameraLens>
 
+    /** Formats, stabilization and lock support of the camera facing [lens]; null if none. */
+    fun capabilities(lens: CameraLens): CameraCapabilities?
+
+    /** Stabilization and locks; kept across [open] calls and applied immediately if open. */
+    suspend fun setControls(controls: CameraControls)
+
+    /** Values the camera is using right now (latest frame), for locking them. */
+    fun currentValues(): CaptureValues?
+
     /** Opens the camera facing [lens]. Requires the CAMERA permission. */
     suspend fun open(lens: CameraLens, config: VideoConfig = VideoConfig()): Boolean
 

@@ -4,7 +4,7 @@ Status against the phases in `SPEC.md` §4.
 
 ## Current phase: Phase 2 — Camera (in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). **2b is in progress.** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. **2c is in progress.** Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -182,3 +182,49 @@ Split into milestones (owner's choice): **1a** engine + recording + playback + m
 - Video plays nowhere yet (the studio / multi-video player is phase 3). The sync check is the only way to look at it for now.
 - Lens/resolution choice and AE/AWB/AF locks, grid, stabilization and ghost come in 2b.
 - The preview runs during calibration; it does not affect the measurement, but it does use CPU.
+
+### 2b — Done (confirmed by owner on 2026-11-08)
+- **Per-project camera settings** (`Project.camera`, saved in `project.json`; projects from before simply get the defaults). These are: lens, resolution, frame rate, stabilization, grid, ghost track + opacity, and locks per lens.
+- **Format:** chips for 720p / 1080p / 4K and 24 / 25 / 30 / 60 fps. Only combinations that this camera *and* the H.264 encoder support are shown, detected from the stream configuration (minimum frame duration), the AE fps ranges and `MediaCodecInfo.VideoCapabilities`. Bit rate: 8 / 16 / 45 Mbit/s, ×1.5 above 30 fps. If a saved format is not supported (e.g. after switching lens), the closest one is used.
+- **Stabilization** on/off (EIS and OIS, whichever the camera has; off by default). The chip is hidden if the camera has neither.
+- **AE/AWB/AF locks** — "para manter a aparência consistente entre trilhas":
+  - A lock stores the values auto-exposure / white balance / focus are using at that moment (exposure time + ISO, WB gains + color transform, focus distance) in the project, per lens.
+  - When the camera supports manual control (`MANUAL_SENSOR` / `MANUAL_POST_PROCESSING`), those exact values are set manually. Every later track, even after closing the app, gets the same look.
+  - Otherwise the plain platform lock flag is used, marked with "*". It holds only while the camera stays open and is re-applied ~1 s after the camera reopens, once 3A has settled.
+  - The focus chip is hidden on fixed-focus lenses.
+- **Grid** (rule of thirds) over the preview.
+- **Ghost (onion skin):** choose a previous track with video. A still from about 1 s into its active take is drawn over the preview with adjustable opacity, mirrored the way that track looked in its own preview. It is not recorded.
+- Reopening the camera (lens/format change) keeps the preview view, so it doesn't flash.
+- Unit tests: 35 (new: camera settings serialization with locks per lens; old projects get default settings).
+- On the phone (front camera):
+  - The card offered 720p/1080p/4K, 24/30/60 fps at 1080p and 30 fps at 4K, and all three locks (persistent).
+  - Grid shown. The exposure lock kept ISO 2901 / 33 ms, and a later 4K take used exactly that exposure. The ghost overlay was visible.
+  - A 4K take recorded fine and was aligned like the 1080p ones.
+  - I restored this project's camera settings afterwards and deleted my test take.
+
+### Fixed during the 2b smoke test
+- **Crash when changing format:** reopening the camera removed the preview view, whose surface died while the session was being rebuilt. Now an invalid surface is skipped, session setup never throws, and the view is kept during reopenings.
+
+### 2b checklist (owner)
+1. **Format:**
+   - Card "Câmera" in the recorder: the resolutions and frame rates offered make sense for each camera (switch front/back and compare).
+   - Record a take at 720p, one at 4K (if offered) and one at 60 fps (if offered). Each records, and "Verificar sincronia" still gives the clap on the "som" frame (±1).
+2. **Stabilization** (if shown): walk while recording with it on and off; the "on" take is steadier (the image may crop a little).
+3. **Locks:**
+   - In a scene with changing light (e.g. move a lamp), with no lock the brightness/color adapt.
+   - Lock exposure + white balance: the image stops adapting.
+   - Record two tracks, leave the project, come back, record a third: all three look the same.
+   - Do they have "*"? If so, they only hold while the camera is open; tell me which ones.
+   - Focus lock (back camera): focus on something, lock, move the phone; the focus stays.
+4. **Grid:** toggles the thirds lines over the preview; they are not in the recorded video.
+5. **Ghost:**
+   - Pick "Fantasma → Trilha 1": that track's image appears over the preview.
+   - Opacity slider works live and is remembered.
+   - "Nenhum" removes it. Deleting that track removes the ghost.
+6. **Persistence:** all of the above is remembered per project (open the other project: it has its own settings).
+
+### 2b known issues / notes
+- A lock measured at one frame rate is reused as is. If you lock at 24 fps and then switch to 60 fps, the exposure is capped at the frame duration (darker).
+- The ghost uses the take's frame at ~1 s; choosing a specific frame could come later if needed.
+- 25 fps is offered only where the camera has a matching AE range (not on the test phone).
+- Default camera/quality settings for new projects belong to phase 2.8 (preferences); for now each new project starts at front / 1080p30 / no locks.

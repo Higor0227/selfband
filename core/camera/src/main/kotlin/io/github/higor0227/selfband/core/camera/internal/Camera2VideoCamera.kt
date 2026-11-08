@@ -10,7 +10,10 @@ import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureResult
 import android.hardware.camera2.TotalCaptureResult
+import android.hardware.camera2.params.ColorSpaceTransform
+import android.hardware.camera2.params.RggbChannelVector
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.media.MediaCodec
@@ -23,15 +26,26 @@ import android.util.Range
 import android.util.Size
 import android.view.Surface
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.higor0227.selfband.core.camera.CameraCapabilities
+import io.github.higor0227.selfband.core.camera.CameraControls
 import io.github.higor0227.selfband.core.camera.CameraState
+import io.github.higor0227.selfband.core.camera.CaptureValues
+import io.github.higor0227.selfband.core.camera.LockSupport
 import io.github.higor0227.selfband.core.camera.PixelSize
 import io.github.higor0227.selfband.core.camera.VideoCamera
 import io.github.higor0227.selfband.core.camera.VideoConfig
 import io.github.higor0227.selfband.core.camera.VideoRecording
 import io.github.higor0227.selfband.core.model.CameraLens
+import io.github.higor0227.selfband.core.model.ExposureLock
+import io.github.higor0227.selfband.core.model.FocusLock
+import io.github.higor0227.selfband.core.model.WhiteBalanceLock
 import io.github.higor0227.selfband.core.model.LOG_TAG
 import io.github.higor0227.selfband.core.model.VideoClock
+import io.github.higor0227.selfband.core.model.VideoResolution
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,6 +86,7 @@ internal class Camera2VideoCamera @Inject constructor(
     private val lock = Mutex()
 
     private suspend fun <T> serial(block: suspend () -> T): T = lock.withLock { withContext(control) { block() } }
+    private val scope = CoroutineScope(SupervisorJob() + control)
 
     private val _state = MutableStateFlow(CameraState())
     override val state: StateFlow<CameraState> = _state.asStateFlow()
@@ -86,6 +101,9 @@ internal class Camera2VideoCamera @Inject constructor(
         val frameRate: Int,
         val afContinuousVideo: Boolean,
         val declaredRealtime: Boolean,
+        val caps: CameraCapabilities,
+        val eis: Boolean,
+        val ois: Boolean,
     )
 
     private var selected: Selected? = null
@@ -101,6 +119,99 @@ internal class Camera2VideoCamera @Inject constructor(
     private var recordingRotation = 0
     private val clock = ClockDetector()
     private val exposures = ExposureLog()
+    @Volatile private var controls = CameraControls()
+    @Volatile private var lastResult: TotalCaptureResult? = null
+    private val capabilityCache = mutableMapOf<CameraLens, CameraCapabilities?>()
+    /** The AF trigger was sent to hold focus (session-only focus lock). */
+    private var afTriggerLocked = false
+    /** Frames since the session started; session-only locks wait for 3A to settle. */
+    @Volatile private var framesSinceSession = 0
+    @Volatile private var pendingSessionLocks = false
+
+    override fun capabilities(lens: CameraLens): CameraCapabilities? = synchronized(capabilityCache) {
+        capabilityCache.getOrPut(lens) {
+            runCatching {
+                val id = manager.cameraIdList.firstOrNull { lensOf(it) == lens }
+                id?.let { readCapabilities(manager.getCameraCharacteristics(it)) }
+            }.onFailure { Log.e(LOG_TAG, "Camera capabilities failed", it) }.getOrNull()
+        }
+    }
+
+    private fun readCapabilities(c: CameraCharacteristics): CameraCapabilities? {
+        val map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return null
+        val sizes = map.getOutputSizes(MediaCodec::class.java).orEmpty()
+        val ranges = c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES).orEmpty()
+        val formats = VideoResolution.entries.associateWith { res ->
+            val size = sizes.firstOrNull { it.width == res.width && it.height == res.height }
+                ?: return@associateWith emptyList()
+            val minFrameNs = map.getOutputMinFrameDuration(MediaCodec::class.java, size)
+            FRAME_RATES.filter { f ->
+                ranges.any { it.upper == f } &&
+                    (minFrameNs <= 0 || minFrameNs <= 1_000_000_000L / f + 100_000) &&
+                    EncoderSupport.supports(res.width, res.height, f)
+            }
+        }.filterValues { it.isNotEmpty() }
+        val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: IntArray(0)
+        val manualSensor = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR in caps
+        val manualPost = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING in caps
+        val minFocus = c.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+        val afModes = c.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES) ?: IntArray(0)
+        val hasAf = minFocus > 0f && (CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO in afModes ||
+            CameraMetadata.CONTROL_AF_MODE_AUTO in afModes)
+        return CameraCapabilities(
+            formats = formats,
+            stabilization = hasEis(c) || hasOis(c),
+            exposureLock = when {
+                manualSensor -> LockSupport.PERSISTENT
+                c.get(CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE) == true -> LockSupport.SESSION
+                else -> LockSupport.NONE
+            },
+            whiteBalanceLock = when {
+                manualPost -> LockSupport.PERSISTENT
+                c.get(CameraCharacteristics.CONTROL_AWB_LOCK_AVAILABLE) == true -> LockSupport.SESSION
+                else -> LockSupport.NONE
+            },
+            focusLock = when {
+                !hasAf -> LockSupport.NONE
+                manualSensor -> LockSupport.PERSISTENT
+                else -> LockSupport.SESSION
+            },
+        )
+    }
+
+    private fun hasEis(c: CameraCharacteristics) =
+        CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON in
+            (c.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES) ?: IntArray(0))
+
+    private fun hasOis(c: CameraCharacteristics) =
+        CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON in
+            (c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION) ?: IntArray(0))
+
+    override suspend fun setControls(controls: CameraControls): Unit = serial {
+        if (controls == this.controls) return@serial
+        this.controls = controls
+        Log.i(LOG_TAG, "Camera controls: $controls")
+        if (session != null) setRepeating(_state.value.recording)
+    }
+
+    override fun currentValues(): CaptureValues? {
+        val r = lastResult ?: return null
+        val exposureTime = r.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+        val iso = r.get(CaptureResult.SENSOR_SENSITIVITY)
+        val gains = r.get(CaptureResult.COLOR_CORRECTION_GAINS)
+        val transform = r.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)
+        val focus = r.get(CaptureResult.LENS_FOCUS_DISTANCE)
+        return CaptureValues(
+            exposure = if (exposureTime != null && iso != null) ExposureLock(exposureTime, iso) else null,
+            whiteBalance = if (gains != null && transform != null) {
+                WhiteBalanceLock(
+                    listOf(gains.red, gains.greenEven, gains.greenOdd, gains.blue),
+                    IntArray(18).also { transform.copyElements(it, 0) }.toList(),
+                )
+            } else null,
+            focus = focus?.let { FocusLock(it) },
+        )
+    }
 
     override fun availableLenses(): List<CameraLens> =
         runCatching { manager.cameraIdList.mapNotNull { lensOf(it) }.distinct() }.getOrDefault(emptyList())
@@ -280,6 +391,7 @@ internal class Camera2VideoCamera @Inject constructor(
         encoderSurface = null
         recordingFile = null
         selected = null
+        lastResult = null
         if (_state.value.isOpen) Log.i(LOG_TAG, "Camera closed")
         _state.value = CameraState()
     }
@@ -315,6 +427,9 @@ internal class Camera2VideoCamera @Inject constructor(
             afContinuousVideo = CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO in afModes,
             declaredRealtime = c.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE) ==
                 CameraMetadata.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME,
+            caps = capabilities(lens) ?: return null,
+            eis = hasEis(c),
+            ois = hasOis(c),
         )
     }
 
@@ -349,24 +464,36 @@ internal class Camera2VideoCamera @Inject constructor(
         _state.update { it.copy(isOpen = false, error = reason) }
     }
 
+    private fun buildOutputs(): List<OutputConfiguration> = buildList {
+        previewSurface?.let { add(OutputConfiguration(it)) }
+        encoderSurface?.let { surface ->
+            add(OutputConfiguration(surface).apply {
+                // Keep the encoder's PTS equal to SENSOR_TIMESTAMP, so the first frame can be
+                // matched to its capture result. Older versions are handled in stopRecording.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    timestampBase = OutputConfiguration.TIMESTAMP_BASE_SENSOR
+                }
+            })
+        }
+    }
+
     private suspend fun buildSession() {
         val dev = device ?: return
         runCatching { session?.close() }
         session = null
+        // The view may have released its surface while we were busy (e.g. during a reopen);
+        // its replacement arrives through setPreviewSurface.
+        if (previewSurface?.isValid == false) previewSurface = null
         sessionPreview = previewSurface
-        val outputs = buildList {
-            previewSurface?.let { add(OutputConfiguration(it)) }
-            encoderSurface?.let { surface ->
-                add(OutputConfiguration(surface).apply {
-                    // Keep the encoder's PTS equal to SENSOR_TIMESTAMP, so the first frame can be
-                    // matched to its capture result. Older versions are handled in stopRecording.
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        timestampBase = OutputConfiguration.TIMESTAMP_BASE_SENSOR
-                    }
-                })
-            }
+        afTriggerLocked = false
+        framesSinceSession = 0
+        val outputs = runCatching {
+            buildOutputs()
+        }.getOrElse {
+            Log.e(LOG_TAG, "Camera outputs unavailable", it)
+            _state.update { s -> s.copy(error = "Camera session failed") }
+            return
         }
-        if (outputs.isEmpty()) return
         val s = suspendCancellableCoroutine { cont ->
             val callback = object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(session: CameraCaptureSession) {
@@ -409,7 +536,7 @@ internal class Camera2VideoCamera @Inject constructor(
                 return true
             }
             // The same template while idle and recording, so exposure does not jump at start.
-            val request = dev.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+            val builder = dev.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                 targets.forEach { addTarget(it) }
                 if (recording) setTag(RECORDING_TAG)
                 set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
@@ -417,8 +544,19 @@ internal class Camera2VideoCamera @Inject constructor(
                 if (pick.afContinuousVideo) {
                     set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                 }
-            }.build()
-            s.setRepeatingRequest(request, captureCallback, handler)
+            }
+            val sessionLocks = applyControls(builder, pick)
+            s.setRepeatingRequest(builder.build(), captureCallback, handler)
+            // Session-only focus lock: one AF trigger holds the current focus until cancelled.
+            if (sessionLocks.focus && !afTriggerLocked) {
+                builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
+                s.capture(builder.build(), captureCallback, handler)
+                afTriggerLocked = true
+            } else if (!sessionLocks.focus && afTriggerLocked) {
+                builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL)
+                s.capture(builder.build(), captureCallback, handler)
+                afTriggerLocked = false
+            }
             true
         }.getOrElse {
             Log.e(LOG_TAG, "setRepeatingRequest failed", it)
@@ -426,8 +564,78 @@ internal class Camera2VideoCamera @Inject constructor(
         }
     }
 
+    private class SessionLocks(val focus: Boolean)
+
+    /**
+     * Applies stabilization and locks. Locks with PERSISTENT support set the stored values
+     * manually (same look on every track); SESSION ones use the platform lock flags, which
+     * wait until 3A has settled after the session starts.
+     */
+    private fun applyControls(b: CaptureRequest.Builder, pick: Selected): SessionLocks {
+        val c = controls
+        val caps = pick.caps
+        if (pick.eis) {
+            b.set(
+                CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
+                if (c.stabilization) CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON
+                else CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF,
+            )
+        }
+        if (pick.ois) {
+            b.set(
+                CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
+                if (c.stabilization) CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON
+                else CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_OFF,
+            )
+        }
+        val settled = framesSinceSession >= SETTLE_FRAMES
+        var waiting = false
+        c.locks.exposure?.let { e ->
+            when (caps.exposureLock) {
+                LockSupport.PERSISTENT -> {
+                    val frameNs = 1_000_000_000L / pick.frameRate
+                    b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    b.set(CaptureRequest.SENSOR_EXPOSURE_TIME, minOf(e.exposureTimeNs, frameNs))
+                    b.set(CaptureRequest.SENSOR_SENSITIVITY, e.sensitivityIso)
+                    b.set(CaptureRequest.SENSOR_FRAME_DURATION, frameNs)
+                }
+                LockSupport.SESSION -> if (settled) b.set(CaptureRequest.CONTROL_AE_LOCK, true) else waiting = true
+                LockSupport.NONE -> Unit
+            }
+        }
+        c.locks.whiteBalance?.let { w ->
+            when (caps.whiteBalanceLock) {
+                LockSupport.PERSISTENT -> if (w.gains.size == 4 && w.transform.size == 18) {
+                    b.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+                    b.set(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX)
+                    b.set(CaptureRequest.COLOR_CORRECTION_GAINS, RggbChannelVector(w.gains[0], w.gains[1], w.gains[2], w.gains[3]))
+                    b.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, ColorSpaceTransform(w.transform.toIntArray()))
+                }
+                LockSupport.SESSION -> if (settled) b.set(CaptureRequest.CONTROL_AWB_LOCK, true) else waiting = true
+                LockSupport.NONE -> Unit
+            }
+        }
+        var focusSession = false
+        c.locks.focus?.let { f ->
+            when (caps.focusLock) {
+                LockSupport.PERSISTENT -> {
+                    b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                    b.set(CaptureRequest.LENS_FOCUS_DISTANCE, f.distanceDiopters)
+                }
+                LockSupport.SESSION -> if (settled) focusSession = true else waiting = true
+                LockSupport.NONE -> Unit
+            }
+        }
+        pendingSessionLocks = waiting
+        return SessionLocks(focusSession)
+    }
+
     private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
         override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+            lastResult = result
+            if (++framesSinceSession == SETTLE_FRAMES && pendingSessionLocks) {
+                scope.launch { serial { if (this@Camera2VideoCamera.session != null) setRepeating(_state.value.recording) } }
+            }
             val ts = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP) ?: return
             if (clock.observe(ts, System.nanoTime(), SystemClock.elapsedRealtimeNanos())) {
                 _state.update { it.copy(clock = clock.clock) }
@@ -481,3 +689,9 @@ internal class ExposureLog(private val capacity: Int = 120) {
 }
 
 private val RECORDING_TAG = Any()
+
+/** Frame rates offered when the camera and the encoder support them. */
+private val FRAME_RATES = listOf(24, 25, 30, 60)
+
+/** About one second at 30 fps for auto-exposure, white balance and focus to settle. */
+private const val SETTLE_FRAMES = 30

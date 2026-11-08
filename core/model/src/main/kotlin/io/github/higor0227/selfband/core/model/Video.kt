@@ -50,3 +50,65 @@ data class TakeVideo(
     fun startFrame(sampleRate: Int): Double? =
         startPositionFrames?.let { it + manualOffsetMs * sampleRate / 1000.0 }
 }
+
+/** Recording resolutions offered (16:9; only those the camera and encoder support). */
+@Serializable
+enum class VideoResolution(val width: Int, val height: Int) {
+    P720(1280, 720),
+    P1080(1920, 1080),
+    P2160(3840, 2160),
+    ;
+
+    /** H.264 bit rate (SPEC 3.6: 1080p30 ≈ 15–20 Mbit/s); higher frame rates get 1.5×. */
+    fun bitRate(frameRate: Int): Int {
+        val base = when (this) {
+            P720 -> 8_000_000
+            P1080 -> 16_000_000
+            P2160 -> 45_000_000
+        }
+        return if (frameRate > 30) base * 3 / 2 else base
+    }
+}
+
+/** Exposure measured by auto-exposure at the moment it was locked. */
+@Serializable
+data class ExposureLock(val exposureTimeNs: Long, val sensitivityIso: Int)
+
+/**
+ * White balance measured by auto white balance at the moment it was locked:
+ * channel gains (R, G even, G odd, B) and the 3×3 color transform as numerator/denominator pairs.
+ */
+@Serializable
+data class WhiteBalanceLock(val gains: List<Float>, val transform: List<Int>)
+
+/** Focus distance (diopters) at the moment it was locked. */
+@Serializable
+data class FocusLock(val distanceDiopters: Float)
+
+/** Locked camera values for one lens; null = automatic. */
+@Serializable
+data class CameraLocks(
+    val exposure: ExposureLock? = null,
+    val whiteBalance: WhiteBalanceLock? = null,
+    val focus: FocusLock? = null,
+)
+
+/** Camera choices of a project (SPEC 2.2), kept between tracks and sessions. */
+@Serializable
+data class CameraSettings(
+    val lens: CameraLens = CameraLens.FRONT,
+    val resolution: VideoResolution = VideoResolution.P1080,
+    val frameRate: Int = 30,
+    val stabilization: Boolean = false,
+    val grid: Boolean = false,
+    /** Track whose video is shown over the preview ("onion skin"); null = none. */
+    val ghostTrackId: String? = null,
+    val ghostOpacity: Float = 0.4f,
+    /** Locks are per lens: values measured on one camera mean nothing on another. */
+    val locks: Map<CameraLens, CameraLocks> = emptyMap(),
+) {
+    fun locksFor(lens: CameraLens): CameraLocks = locks[lens] ?: CameraLocks()
+
+    fun withLocks(lens: CameraLens, transform: (CameraLocks) -> CameraLocks): CameraSettings =
+        copy(locks = locks + (lens to transform(locksFor(lens))))
+}

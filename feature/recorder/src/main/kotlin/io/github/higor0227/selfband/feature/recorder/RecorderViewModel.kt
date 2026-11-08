@@ -32,6 +32,8 @@ import io.github.higor0227.selfband.core.model.AudioDevice
 import io.github.higor0227.selfband.core.model.AudioDeviceType
 import io.github.higor0227.selfband.core.model.CalibrationMethod
 import io.github.higor0227.selfband.core.model.CameraLens
+import io.github.higor0227.selfband.core.model.CameraSettings
+import io.github.higor0227.selfband.core.model.VideoResolution
 import io.github.higor0227.selfband.core.model.DeviceProfile
 import io.github.higor0227.selfband.core.model.InputChannel
 import io.github.higor0227.selfband.core.model.LatencyCalibration
@@ -43,7 +45,10 @@ import io.github.higor0227.selfband.core.model.Project
 import io.github.higor0227.selfband.core.model.Take
 import io.github.higor0227.selfband.core.model.TakeVideo
 import io.github.higor0227.selfband.core.model.Track
+import io.github.higor0227.selfband.core.camera.CameraCapabilities
+import io.github.higor0227.selfband.core.camera.CameraControls
 import io.github.higor0227.selfband.core.camera.CameraState
+import io.github.higor0227.selfband.core.camera.VideoConfig
 import io.github.higor0227.selfband.core.camera.VideoCamera
 import io.github.higor0227.selfband.core.camera.VideoRecording
 import io.github.higor0227.selfband.core.project.DeviceProfileRepository
@@ -56,6 +61,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -117,6 +123,11 @@ sealed interface CalibrationUi {
     data class Finished(val task: CalibrationTask, val outcome: CalibrationOutcome) : CalibrationUi
 }
 
+enum class CameraLockKind { EXPOSURE, WHITE_BALANCE, FOCUS }
+
+/** A still of a previous track shown over the preview to repeat the framing (SPEC 2.2). */
+data class GhostUi(val trackId: String, val bitmap: Bitmap, val mirrored: Boolean)
+
 enum class SyncCheckError { NO_PEAK, NO_TIMESTAMP, OUT_OF_RANGE, DECODE }
 
 /** One video frame around the clap; [offset] 0 is where the clap sound falls. */
@@ -150,10 +161,13 @@ data class RecorderUiState(
     val cameraPermission: Boolean = false,
     /** Record video with new tracks (off = audio-only tracks, SPEC 2.2). */
     val videoEnabled: Boolean = true,
-    val lens: CameraLens = CameraLens.FRONT,
     val availableLenses: List<CameraLens> = emptyList(),
+    /** Capabilities of the camera in use (formats, stabilization, locks). */
+    val capabilities: CameraCapabilities? = null,
+    val ghost: GhostUi? = null,
     val syncCheck: SyncCheckUi? = null,
 ) {
+    val cameraSettings: CameraSettings get() = project?.camera ?: CameraSettings()
     val transport: TransportState get() = status.transport
     val isIdle: Boolean get() = transport == TransportState.IDLE
 
@@ -179,6 +193,8 @@ class RecorderViewModel @Inject constructor(
 
     // Serializes engine operations triggered by the UI and by device events.
     private val ops = Mutex()
+    // Serializes camera reopenings (lens, format) so quick taps do not interleave.
+    private val cameraOps = Mutex()
     private var screenActive = false
     private var engineTrackIds: List<String> = emptyList()
     private var recordingTrackId: String? = null
@@ -199,6 +215,21 @@ class RecorderViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecorderUiState())
 
     init {
+        // Ghost: load a still of the chosen track's active take whenever the choice changes.
+        viewModelScope.launch {
+            repository.observe(projectId).filterNotNull().map { p ->
+                val id = p.camera.ghostTrackId ?: return@map null
+                val track = p.tracks.firstOrNull { it.id == id } ?: return@map null
+                val take = track.activeTake ?: return@map null
+                val video = take.video ?: return@map null
+                Triple(track.id, repository.takeAudioFile(p.id, track.id, video.file), video)
+            }.distinctUntilChanged().collectLatest { ghost ->
+                val ui = ghost?.let { (trackId, file, video) ->
+                    withContext(Dispatchers.IO) { loadGhost(file, video) }?.let { GhostUi(trackId, it, video.previewMirrored) }
+                }
+                local.update { it.copy(ghost = ui) }
+            }
+        }
         // Device plugged/unplugged: finish any take and reopen on the new route.
         viewModelScope.launch {
             deviceMonitor.devices.drop(1).debounce(DEVICE_DEBOUNCE_MS).collect {
@@ -259,25 +290,112 @@ class RecorderViewModel @Inject constructor(
     }
 
     fun switchLens() {
-        if (!uiState.value.isIdle) return
         val lenses = local.value.availableLenses
         if (lenses.size < 2) return
-        val next = lenses[(lenses.indexOf(local.value.lens) + 1) % lenses.size]
-        local.update { it.copy(lens = next) }
-        viewModelScope.launch { openCamera() }
+        updateCamera(reopen = true) { s -> s.copy(lens = lenses[(lenses.indexOf(s.lens) + 1) % lenses.size]) }
+    }
+
+    fun setResolution(resolution: VideoResolution) = updateCamera(reopen = true) { it.copy(resolution = resolution) }
+
+    fun setFrameRate(frameRate: Int) = updateCamera(reopen = true) { it.copy(frameRate = frameRate) }
+
+    fun setStabilization(on: Boolean) = updateCamera { it.copy(stabilization = on) }
+
+    fun setGrid(on: Boolean) = updateCamera { it.copy(grid = on) }
+
+    fun setGhostTrack(trackId: String?) = updateCamera { it.copy(ghostTrackId = trackId) }
+
+    fun setGhostOpacity(opacity: Float) = updateCamera(whileRecording = true) { it.copy(ghostOpacity = opacity.coerceIn(0.05f, 0.95f)) }
+
+    /**
+     * Locks keep the values the camera is using right now (per lens), so every following
+     * track looks the same (SPEC 2.2). Tapping again returns to automatic.
+     */
+    fun toggleLock(kind: CameraLockKind) {
+        val values = camera.currentValues()
+        updateCamera { s ->
+            s.withLocks(s.lens) { l ->
+                when (kind) {
+                    CameraLockKind.EXPOSURE -> l.copy(exposure = if (l.exposure != null) null else values?.exposure)
+                    CameraLockKind.WHITE_BALANCE -> l.copy(whiteBalance = if (l.whiteBalance != null) null else values?.whiteBalance)
+                    CameraLockKind.FOCUS -> l.copy(focus = if (l.focus != null) null else values?.focus)
+                }
+            }
+        }
+    }
+
+    private fun updateCamera(
+        reopen: Boolean = false,
+        whileRecording: Boolean = false,
+        transform: (CameraSettings) -> CameraSettings,
+    ) {
+        if (!whileRecording && !uiState.value.isIdle) return
+        viewModelScope.launch {
+            val updated = repository.update(projectId) { it.copy(camera = transform(it.camera)) }
+            if (reopen) {
+                openCamera()
+            } else {
+                camera.setControls(controlsFor(updated.camera))
+            }
+        }
+    }
+
+    private fun controlsFor(settings: CameraSettings) =
+        CameraControls(stabilization = settings.stabilization, locks = settings.locksFor(settings.lens))
+
+    /** The chosen format if supported, else the closest one the camera offers. */
+    private fun supportedFormat(caps: CameraCapabilities?, settings: CameraSettings): Pair<VideoResolution, Int> {
+        val formats = caps?.formats.orEmpty()
+        if (formats.isEmpty()) return settings.resolution to settings.frameRate
+        val resolution = settings.resolution.takeIf { it in formats }
+            ?: VideoResolution.P1080.takeIf { it in formats }
+            ?: formats.keys.maxBy { it.width }
+        val rates = formats.getValue(resolution)
+        val frameRate = settings.frameRate.takeIf { it in rates }
+            ?: 30.takeIf { it in rates }
+            ?: rates.minBy { kotlin.math.abs(it - settings.frameRate) }
+        return resolution to frameRate
+    }
+
+    private fun loadGhost(file: File, video: TakeVideo): Bitmap? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            // About one second in: past any first-frame exposure settling.
+            val index = minOf(video.frameRate, video.frameCount - 1).coerceAtLeast(0)
+            val full = retriever.getFrameAtIndex(index) ?: return null
+            val w = minOf(GHOST_WIDTH, full.width)
+            val h = (full.height.toLong() * w / full.width).toInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(full, w, h, true).also { if (it !== full) full.recycle() }
+        } catch (e: Exception) {
+            Log.e(LOG_TAG, "Ghost frame failed", e)
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
     }
 
     fun setPreviewSurface(surface: android.view.Surface?) {
         viewModelScope.launch { camera.setPreviewSurface(surface) }
     }
 
-    private suspend fun openCamera() {
+    private suspend fun openCamera() = cameraOps.withLock {
         val l = local.value
-        if (!l.cameraPermission || !l.videoEnabled || !screenActive) return
+        if (!l.cameraPermission || !l.videoEnabled || !screenActive) return@withLock
         val lenses = camera.availableLenses()
-        val lens = if (l.lens in lenses) l.lens else lenses.firstOrNull() ?: return
-        local.update { it.copy(availableLenses = lenses, lens = lens) }
-        if (!camera.open(lens)) Log.w(LOG_TAG, "Camera $lens could not be opened: ${camera.state.value.error}")
+        var settings = currentProject().camera
+        if (settings.lens !in lenses) {
+            val fallback = lenses.firstOrNull() ?: return@withLock
+            settings = repository.update(projectId) { it.copy(camera = it.camera.copy(lens = fallback)) }.camera
+        }
+        val caps = camera.capabilities(settings.lens)
+        val (resolution, frameRate) = supportedFormat(caps, settings)
+        local.update { it.copy(availableLenses = lenses, capabilities = caps) }
+        camera.setControls(controlsFor(settings))
+        val config = VideoConfig(resolution.width, resolution.height, frameRate, resolution.bitRate(frameRate))
+        if (!camera.open(settings.lens, config)) {
+            Log.w(LOG_TAG, "Camera ${settings.lens} could not be opened: ${camera.state.value.error}")
+        }
     }
 
     /** Video manual offset, independent of the audio offset (SPEC 3.4). */
@@ -889,6 +1007,7 @@ class RecorderViewModel @Inject constructor(
         /** Frames shown on each side of the clap in the sync check. */
         private const val SYNC_FRAMES = 3
         private const val SYNC_THUMB_WIDTH = 360
+        private const val GHOST_WIDTH = 720
         // Track names are user data (renaming comes later); the number is what matters.
         private const val TRACK_NAME_PREFIX = "#"
     }

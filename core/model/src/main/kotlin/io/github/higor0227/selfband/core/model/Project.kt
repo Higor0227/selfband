@@ -24,6 +24,7 @@ data class Project(
     val sampleRate: Int,
     val aspectRatio: AspectRatio = AspectRatio.PORTRAIT_9_16,
     val metronome: MetronomeSettings = MetronomeSettings(),
+    val camera: CameraSettings = CameraSettings(),
     val tracks: List<Track> = emptyList(),
 ) {
     /** Project length = end of the longest active take, in frames. */
