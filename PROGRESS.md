@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 6 — Scale and experience (6c done; 6d in progress)
+## Current phase: Phase 6 — Scale and experience (6d done; 6e in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Phase 6 is split into 6a (preview proxies), 6b (multi-pass export + tests with 12–16 tracks), 6c (settings: defaults, theme, language, verbose log), 6d (first-run wizard) and 6e (user-saved layout templates); proxies come first because they are the biggest risk of the phase. 6a was confirmed by the owner on 2026-11-08. 6b was confirmed by the owner on 2026-11-08. On 2026-11-08 the owner said to proceed after 6c (no test results reported yet). Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Phase 6 is split into 6a (preview proxies), 6b (multi-pass export + tests with 12–16 tracks), 6c (settings: defaults, theme, language, verbose log), 6d (first-run wizard) and 6e (user-saved layout templates); proxies come first because they are the biggest risk of the phase. 6a was confirmed by the owner on 2026-11-08. 6b was confirmed by the owner on 2026-11-08. On 2026-11-08 the owner said to proceed after 6c and after 6d (no test results reported yet). Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -796,3 +796,40 @@ Use a project with 2+ tracks with video, a trim and some layout/background chang
 - Changing the language recreates the screen (that is how Android applies it); an unsaved text field on that screen may lose its draft.
 - The defaults only apply to projects created after the change, as SPEC 2.8 describes; there is no "apply to existing projects".
 - Not checked on the phone by me: the owner was using another app, so the APK was only installed (not opened). Logcat review is part of the checklist.
+
+### 6d — First-run wizard (owner said to proceed on 2026-11-08)
+- **Where it shows:** on the first launch, before the project list (`onboardingDone` in the settings). It also opens from Configurações → Assistente inicial.
+  - This phone already has the app, but it has never finished the wizard, so the wizard opens on the next launch.
+- **Leaving:** "Pular" (top right) or "Concluir" on the last step. Both mark the wizard as done; it does not come back on its own.
+- **Steps (SPEC 2.8):**
+  1. **Permissões:** microphone, camera and, on Android 13+, notifications. Each one shows whether it is allowed, and one button asks for all the missing ones. Continuing without them is allowed; the app asks again when it needs them.
+  2. **Como você grava?:** Microfone do celular / Fone com fio / Interface USB / Bluetooth.
+     - The first guess comes from what is connected: USB input, then Bluetooth, then wired, else the phone.
+     - The connected devices are listed. A warning appears if the chosen equipment is not connected.
+     - The answer is saved (`recordingSetup`). It only picks which calibration method is suggested and which tips are shown; the engine still follows the detected devices (SPEC §1).
+  3. **Calibração:** opens the audio engine on the current route and shows its output and input, plus the saved calibration if there is one.
+     - Phone mic, wired and Bluetooth: Acústico is recommended (for headphones, hold an earbud against the mic), Tocar junto as the alternative.
+     - USB interface: Cabo de loopback is recommended, Tocar junto as the alternative, plus the Teste de vazamento.
+     - A successful result is saved to the route's profile right away. "Repetir" measures again.
+     - Plugging or unplugging a device reopens the engine on the new route. Bluetooth shows the latency warning.
+  4. **Formato padrão:** 9:16 / 16:9 / 1:1, the same setting as Configurações → Novos projetos → Formato.
+- **Refactor:** the calibration measurement and its pass/fail rules moved from the recorder into `:core:audio`, so the recorder and the wizard judge results the same way. The recorder's Calibrate / test dialog is unchanged on screen.
+  - `RouteCalibrator`, `CalibrationTask`, `CalibrationOutcome` and `AudioRoute` now live in `:core:audio`.
+- New tests: `RecordingSetupTest` (detection). 115 unit tests, 0 failures.
+
+### 6d checklist (owner)
+1. Open the app: the wizard appears ("Passo 1 de 4"). Permissões shows the state of each permission. Tap Permitir if something is missing, then Continuar.
+2. Como você grava? With the interface plugged in, Interface USB is preselected and "Conectado agora" lists it. Pick another option whose equipment is missing (e.g. Bluetooth): the warning appears.
+3. Calibração with Interface USB: output and input show the interface.
+   - Run Cabo de loopback with the cable: a round-trip value appears with "Salvo para esta saída e entrada". It should match the recorder's calibration within about 1 ms.
+   - Run the Teste de vazamento.
+   - Unplug the interface during this step: the route switches to the phone.
+4. Formato padrão: pick 16:9 and tap Concluir. The project list opens; a new project starts in 16:9, and Configurações → Novos projetos shows 16:9.
+5. Close and reopen the app: the wizard does not appear again. Configurações → Assistente inicial opens it; Concluir goes back to Configurações.
+6. Regression: in the recorder, Calibrate / test still works for all four options (acoustic, loopback, tap, leak), and the result is saved as before.
+7. Logcat (`adb logcat -s Selfband:V`): "Onboarding: engine open on …", the calibration line, and "Onboarding finished: …", with no errors.
+
+### 6d known issues / notes
+- The wizard calibrates the route that is connected at that moment. Headphones plugged in later make a different route, which the recorder shows as not calibrated, as before.
+- The wizard's calibration is saved without the recorder's "Save to profile" confirmation (a guided first run); "Repetir" overwrites it.
+- Not checked on the phone by me: the owner was using another app, so the APK was only installed (not opened).

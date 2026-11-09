@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.feature.recorder
 
+import io.github.higor0227.selfband.core.audio.calibration.CalibrationFailure
+import io.github.higor0227.selfband.core.audio.calibration.CalibrationOutcome
+import io.github.higor0227.selfband.core.audio.calibration.CalibrationTask
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

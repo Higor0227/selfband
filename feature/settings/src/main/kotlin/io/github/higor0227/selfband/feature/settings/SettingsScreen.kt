@@ -72,10 +72,11 @@ import kotlin.math.roundToInt
 fun SettingsRoute(
     onBack: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenOnboarding: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    SettingsScreen(state, onBack, onOpenDiagnostics, viewModel::update, viewModel::setExportFolder)
+    SettingsScreen(state, onBack, onOpenDiagnostics, onOpenOnboarding, viewModel::update, viewModel::setExportFolder)
 }
 
 /** App settings (SPEC 2.8). */
@@ -85,6 +86,7 @@ fun SettingsScreen(
     state: SettingsUiState,
     onBack: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenOnboarding: () -> Unit,
     onUpdate: ((AppSettings) -> AppSettings) -> Unit,
     onExportFolder: (String) -> Unit,
 ) {
@@ -174,6 +176,23 @@ fun SettingsScreen(
                         selected = current == count,
                         onClick = { onUpdate { it.copy(exportDecodersPerPass = count) } },
                     )
+                }
+            }
+
+            Card(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.fillMaxWidth().clickable(onClick = onOpenOnboarding).padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.settings_onboarding), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.settings_onboarding_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
                 }
             }
 

@@ -81,6 +81,10 @@ data class AppSettings(
     val export: ExportDefaults = ExportDefaults(),
     /** Folder under Movies/ and Music/ where exports go. */
     val exportFolder: String = ExportFolder.DEFAULT,
+    /** The first-run wizard was finished or skipped (SPEC 2.8). */
+    val onboardingDone: Boolean = false,
+    /** The wizard's answer to "How do you record?"; null until asked. */
+    val recordingSetup: RecordingSetup? = null,
 ) {
     /** A just-created [project] with these defaults applied. */
     fun applyTo(project: Project): Project = project.copy(

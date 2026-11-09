@@ -12,6 +12,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.higor0227.selfband.core.audio.AudioDeviceMonitor
 import io.github.higor0227.selfband.core.audio.AudioEngine
+import io.github.higor0227.selfband.core.audio.AudioRoute
+import io.github.higor0227.selfband.core.audio.calibration.CalibrationFailure
+import io.github.higor0227.selfband.core.audio.calibration.CalibrationOutcome
+import io.github.higor0227.selfband.core.audio.calibration.CalibrationTask
+import io.github.higor0227.selfband.core.audio.calibration.RouteCalibrator
 import io.github.higor0227.selfband.core.audio.AudioRouting
 import io.github.higor0227.selfband.core.audio.EngineConfig
 import io.github.higor0227.selfband.core.audio.EngineOpenResult
@@ -23,23 +28,18 @@ import io.github.higor0227.selfband.core.audio.TakeAudio
 import io.github.higor0227.selfband.core.audio.TransportState
 import io.github.higor0227.selfband.core.audio.Waveforms
 import io.github.higor0227.selfband.core.audio.alignment
-import io.github.higor0227.selfband.core.audio.calibration.LatencyCalibrator
-import io.github.higor0227.selfband.core.audio.calibration.MeasurementKind
-import io.github.higor0227.selfband.core.audio.calibration.MeasurementResult
 import io.github.higor0227.selfband.core.model.AlignmentInfo
 import io.github.higor0227.selfband.core.model.AlignmentMath
 import io.github.higor0227.selfband.core.model.AlignmentMethod
 import io.github.higor0227.selfband.core.model.AspectRatio
 import io.github.higor0227.selfband.core.model.AudioDevice
 import io.github.higor0227.selfband.core.model.AudioDeviceType
-import io.github.higor0227.selfband.core.model.CalibrationMethod
 import io.github.higor0227.selfband.core.model.CameraLens
 import io.github.higor0227.selfband.core.model.CameraSettings
 import io.github.higor0227.selfband.core.model.VideoResolution
 import io.github.higor0227.selfband.core.model.DeviceProfile
 import io.github.higor0227.selfband.core.model.InputChannel
 import io.github.higor0227.selfband.core.model.LatencyCalibration
-import io.github.higor0227.selfband.core.model.LeakTestResult
 import io.github.higor0227.selfband.core.model.LOG_TAG
 import io.github.higor0227.selfband.core.model.Levels
 import io.github.higor0227.selfband.core.model.MetronomeSettings
@@ -98,38 +98,6 @@ import java.util.UUID
 import javax.inject.Inject
 
 enum class RecorderNotice { DEVICE_CHANGED, TAKE_INTERRUPTED, TAKE_GLITCHED, RECORD_FAILED }
-
-/** The devices the engine actually runs on, and the key of their saved profile. */
-data class AudioRoute(val key: String, val output: AudioDevice?, val input: AudioDevice?) {
-    /** Software monitoring is never allowed on a loudspeaker (feedback risk, SPEC 2.4). */
-    val monitoringAllowed: Boolean
-        get() = output != null && output.type !in LOUDSPEAKERS
-
-    val isBluetooth: Boolean
-        get() = output?.category == io.github.higor0227.selfband.core.model.AudioDeviceCategory.BLUETOOTH
-
-    private companion object {
-        val LOUDSPEAKERS = setOf(
-            AudioDeviceType.BUILTIN_SPEAKER, AudioDeviceType.BUILTIN_EARPIECE, AudioDeviceType.BLE_SPEAKER,
-            AudioDeviceType.HDMI, AudioDeviceType.TELEPHONY, AudioDeviceType.REMOTE_SUBMIX,
-        )
-    }
-}
-
-enum class CalibrationTask(val method: CalibrationMethod?) {
-    ACOUSTIC(CalibrationMethod.ACOUSTIC),
-    LOOPBACK(CalibrationMethod.LOOPBACK),
-    TAP(CalibrationMethod.TAP),
-    LEAK(null),
-}
-
-enum class CalibrationFailure { NO_SIGNAL, INCONSISTENT, INTERRUPTED }
-
-sealed interface CalibrationOutcome {
-    data class Calibrated(val calibration: LatencyCalibration, val saved: Boolean) : CalibrationOutcome
-    data class Leak(val result: LeakTestResult) : CalibrationOutcome
-    data class Failed(val reason: CalibrationFailure) : CalibrationOutcome
-}
 
 sealed interface CalibrationUi {
     data object Idle : CalibrationUi
@@ -209,7 +177,7 @@ class RecorderViewModel @Inject constructor(
     private val engine: AudioEngine,
     private val deviceMonitor: AudioDeviceMonitor,
     private val profiles: DeviceProfileRepository,
-    private val calibrator: LatencyCalibrator,
+    private val routeCalibrator: RouteCalibrator,
     private val camera: VideoCamera,
     private val waveforms: Waveforms,
     canvasFactory: CanvasPreviewFactory,
@@ -952,64 +920,16 @@ class RecorderViewModel @Inject constructor(
     fun closeCalibration() = local.update { it.copy(calibration = CalibrationUi.Idle) }
 
     private suspend fun measure(task: CalibrationTask): CalibrationOutcome {
-        val status = engine.status.value
-        val sampleRate = status.sampleRate
         val profile = local.value.route?.let { profiles.get(it.key) }
-        // Silence everything the measurement must not hear: tracks and software monitoring.
-        engine.setTracks(emptyList())
         engineTrackIds = emptyList()
-        engine.setInputProcessing(Levels.dbToLinear(profile?.inputGainDb ?: 0.0).toFloat(), 0f, RecordChannelMode.FIRST)
-        val mode = if (status.inputChannels >= 2) RecordChannelMode.STEREO else RecordChannelMode.FIRST
-        val kind = if (task == CalibrationTask.TAP) MeasurementKind.TAPS else MeasurementKind.IMPULSES
-        val file = File(context.cacheDir, "calibration.wav")
-        val result = calibrator.measure(kind, file, sampleRate, mode) { progress ->
+        val outcome = routeCalibrator.measure(task, profile, File(context.cacheDir, "calibration.wav")) { progress ->
             local.update { s ->
                 val running = s.calibration as? CalibrationUi.Running ?: return@update s
                 s.copy(calibration = running.copy(progress = progress))
             }
         }
-        val done = result as? MeasurementResult.Done
-            ?: return CalibrationOutcome.Failed(CalibrationFailure.INTERRUPTED)
-        val a = done.analysis
-        val now = System.currentTimeMillis()
-
-        if (task == CalibrationTask.LEAK) {
-            val detected = a.lagFrames != null && a.coherence >= LatencyCalibrator.MIN_LEAK_COHERENCE &&
-                a.accepted * 2 >= a.attempts
-            val leak = LeakTestResult(
-                detected = detected,
-                levelDb = if (detected) a.levelDb else null,
-                delayMs = if (detected) done.roundTripMs else null,
-                testedAtMillis = now,
-            )
-            saveProfile { it.copy(leak = leak) }
-            return CalibrationOutcome.Leak(leak)
-        }
-
-        val residual = done.residualMs
-        val roundTrip = done.roundTripMs
-        val failure = when {
-            residual == null || roundTrip == null -> CalibrationFailure.NO_SIGNAL
-            kind == MeasurementKind.IMPULSES && a.coherence < LatencyCalibrator.MIN_CALIBRATION_COHERENCE ->
-                CalibrationFailure.NO_SIGNAL
-            kind == MeasurementKind.TAPS && a.accepted < LatencyCalibrator.MIN_TAPS -> CalibrationFailure.NO_SIGNAL
-            a.accepted * 2 < a.attempts -> CalibrationFailure.INCONSISTENT
-            else -> null
-        }
-        if (failure != null) return CalibrationOutcome.Failed(failure)
-        return CalibrationOutcome.Calibrated(
-            LatencyCalibration(
-                method = task.method!!,
-                residualMs = residual!!,
-                roundTripMs = roundTrip!!,
-                spreadMs = done.spreadMs,
-                accepted = a.accepted,
-                attempts = a.attempts,
-                sampleRate = sampleRate,
-                measuredAtMillis = now,
-            ),
-            saved = false,
-        )
+        if (outcome is CalibrationOutcome.Leak) saveProfile { it.copy(leak = outcome.result) }
+        return outcome
     }
 
     fun deleteProfileCalibration() {
@@ -1022,15 +942,7 @@ class RecorderViewModel @Inject constructor(
 
     private suspend fun currentProject(): Project = repository.observe(projectId).filterNotNull().first()
 
-    private fun newProfile(): DeviceProfile? {
-        val route = local.value.route ?: return null
-        return DeviceProfile(
-            key = route.key,
-            outputLabel = DeviceProfile.deviceLabel(route.output),
-            inputLabel = DeviceProfile.deviceLabel(route.input),
-            monitoring = false, // SPEC 2.4: off by default
-        )
-    }
+    private fun newProfile(): DeviceProfile? = local.value.route?.newProfile()
 
     /** Creates or updates the profile of the current route. */
     private suspend fun saveProfile(transform: (DeviceProfile) -> DeviceProfile): DeviceProfile? {
@@ -1055,12 +967,8 @@ class RecorderViewModel @Inject constructor(
         engine.setInputProcessing(gain, monitor, effectiveChannelMode())
     }
 
-    private fun resolveRoute(status: EngineStatus, preferredInput: AudioDevice?): AudioRoute {
-        val devices = deviceMonitor.devices.value
-        val output = devices.firstOrNull { !it.isInput && it.id == status.outputDeviceId }
-        val input = devices.firstOrNull { it.isInput && it.id == status.inputDeviceId } ?: preferredInput
-        return AudioRoute(DeviceProfile.routeKey(output, input), output, input)
-    }
+    private fun resolveRoute(status: EngineStatus, preferredInput: AudioDevice?): AudioRoute =
+        AudioRoute.of(deviceMonitor.devices.value, status, preferredInput)
 
     private fun effectiveChannelMode(): RecordChannelMode {
         val channels = engine.status.value.inputChannels
