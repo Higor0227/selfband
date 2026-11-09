@@ -38,4 +38,13 @@
     <string name="bg_importing">Importing image…</string>
     <string name="bg_import_failed">Could not open that image.</string>
     <string name="bg_fallback_color">Color (shown until the video or image is ready)</string>
+
+    <!-- Saved layout templates (SPEC 2.6). -->
+    <string name="layout_save_template">Save as template</string>
+    <string name="layout_save_template_text">Saves the position and look of the visible layers, in track order, to use in any project.</string>
+    <string name="layout_template_name">Name</string>
+    <string name="layout_template_save">Save</string>
+    <string name="layout_template_default_name">My layout %1$d</string>
+    <string name="layout_template_saved">Template “%1$s” saved. It appears in the Canvas card of every project.</string>
+    <string name="layout_template_nothing">No visible layer to save.</string>
 </resources>

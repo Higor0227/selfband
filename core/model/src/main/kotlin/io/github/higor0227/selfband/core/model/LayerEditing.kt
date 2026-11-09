@@ -29,6 +29,25 @@ object LayerEditing {
     fun materialize(project: Project, templates: List<LayoutTemplate> = LayoutTemplates.builtIn): CanvasSettings =
         project.canvas.copy(templateId = null, layers = CanvasLayout.effectiveLayers(project, templates))
 
+    /**
+     * Applies a saved [template] as a free layout (SPEC 2.6): the video tracks take its slots
+     * and looks in track order, keep their own crops, and tracks beyond the last slot are
+     * hidden (they can be shown again in the editor). The project keeps no link to the
+     * template, so deleting or changing the template later never changes the project.
+     */
+    fun applyTemplate(project: Project, template: LayoutTemplate, templates: List<LayoutTemplate> = LayoutTemplates.builtIn): CanvasSettings {
+        val slots = template.slotsFor(project.aspectRatio)
+        val current = CanvasLayout.effectiveLayers(project, templates).associateBy { it.trackId }
+        val videoTracks = project.tracks.filter { current.containsKey(it.id) }
+        val layers = videoTracks.mapIndexed { i, track ->
+            val layer = current.getValue(track.id)
+            val slot = slots.getOrNull(i) ?: return@mapIndexed layer.copy(visible = false)
+            val styled = template.styles?.getOrNull(i)?.applyTo(layer) ?: layer
+            styled.copy(frame = slot, visible = true)
+        }
+        return project.canvas.copy(templateId = null, layers = layers)
+    }
+
     fun replace(canvas: CanvasSettings, layer: Layer): CanvasSettings =
         canvas.copy(layers = canvas.layers.map { if (it.trackId == layer.trackId) layer else it })
 

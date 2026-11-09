@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.feature.recorder
 
+import io.github.higor0227.selfband.core.model.LayoutTemplate
+import io.github.higor0227.selfband.core.model.LayerEditing
+import io.github.higor0227.selfband.core.project.LayoutTemplateRepository
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
@@ -132,6 +135,8 @@ enum class PanelMode { CAMERA, CANVAS, MIXER }
 
 data class RecorderUiState(
     val project: Project? = null,
+    /** Layout templates saved by the user (SPEC 2.6). */
+    val userTemplates: List<LayoutTemplate> = emptyList(),
     val status: EngineStatus = EngineStatus(),
     val inputDevice: AudioDevice? = null,
     val channelMode: RecordChannelMode = RecordChannelMode.FIRST,
@@ -178,6 +183,7 @@ class RecorderViewModel @Inject constructor(
     private val deviceMonitor: AudioDeviceMonitor,
     private val profiles: DeviceProfileRepository,
     private val routeCalibrator: RouteCalibrator,
+    private val layoutTemplates: LayoutTemplateRepository,
     private val camera: VideoCamera,
     private val waveforms: Waveforms,
     canvasFactory: CanvasPreviewFactory,
@@ -222,6 +228,9 @@ class RecorderViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecorderUiState())
 
     init {
+        viewModelScope.launch {
+            layoutTemplates.templates.collect { t -> local.update { it.copy(userTemplates = t) } }
+        }
         // Canvas: the video follows the audio clock while the transport runs, else the playhead.
         canvasPreview.setPosition { timeNanos ->
             val s = engine.status.value
@@ -342,6 +351,23 @@ class RecorderViewModel @Inject constructor(
         viewModelScope.launch {
             repository.update(projectId) { it.copy(canvas = it.canvas.copy(templateId = templateId)) }
         }
+    }
+
+    /** Applies a saved template as a free layout; the project keeps no link to it. */
+    fun applyUserTemplate(templateId: String) {
+        val template = layoutTemplates.templates.value.firstOrNull { it.id == templateId } ?: return
+        viewModelScope.launch {
+            repository.update(projectId) { it.copy(canvas = LayerEditing.applyTemplate(it, template)) }
+            Log.i(LOG_TAG, "Layout template applied: $templateId")
+        }
+    }
+
+    fun renameUserTemplate(templateId: String, name: String) {
+        viewModelScope.launch { layoutTemplates.rename(templateId, name) }
+    }
+
+    fun deleteUserTemplate(templateId: String) {
+        viewModelScope.launch { layoutTemplates.delete(templateId) }
     }
 
     /** Global trim (SPEC 2.6), clamped to the project; non-destructive. */

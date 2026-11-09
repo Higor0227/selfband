@@ -218,4 +218,15 @@
     <string name="trim_end_here">Fim no cursor</string>
     <string name="trim_clear">Sem corte</string>
     <string name="timeline_hint">Arraste uma trilha para o lado para alinhar; amplie (+) para mais precisão. Arraste as alças da régua para cortar o início e o fim. Toque na régua para mover o cursor. Nada é apagado dos arquivos.</string>
+
+    <!-- Saved layout templates (SPEC 2.6). -->
+    <string name="canvas_my_templates">Meus templates</string>
+    <string name="canvas_my_templates_hint">Salvos no editor de layout. Toque para usar neste projeto (vira layout livre); segure para renomear ou excluir.</string>
+    <string name="canvas_user_template">Template salvo %1$s</string>
+    <string name="canvas_template_title">Template salvo</string>
+    <string name="canvas_template_name">Nome</string>
+    <string name="canvas_template_rename">Renomear</string>
+    <string name="canvas_delete_template">Excluir</string>
+    <string name="canvas_delete_template_title">Excluir “%1$s”?</string>
+    <string name="canvas_delete_template_text">Os projetos que já usam este layout continuam com ele.</string>
 </resources>

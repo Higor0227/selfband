@@ -19,6 +19,7 @@ import io.github.higor0227.selfband.core.model.Project
 import io.github.higor0227.selfband.core.model.displayAspect
 import io.github.higor0227.selfband.core.model.value
 import io.github.higor0227.selfband.core.project.AppSettingsRepository
+import io.github.higor0227.selfband.core.project.LayoutTemplateRepository
 import io.github.higor0227.selfband.core.project.ProjectRepository
 import io.github.higor0227.selfband.core.video.CanvasPreview
 import io.github.higor0227.selfband.core.video.CanvasPreviewFactory
@@ -66,13 +67,23 @@ data class LayoutUiState(
     val playheadFrames: Long = 0,
     val importingImage: Boolean = false,
     val imageImportFailed: Boolean = false,
+    /** Number of templates the user has saved, for the next default name. */
+    val savedTemplates: Int = 0,
+    /** Result of the last "save as template", shown once. */
+    val templateMessage: TemplateMessage? = null,
 ) {
     val selected: Layer? get() = layers.firstOrNull { it.trackId == selectedTrackId }
     val canvasAspect: Float get() = project?.aspectRatio?.value ?: (9f / 16f)
 }
 
+sealed interface TemplateMessage {
+    data class Saved(val name: String) : TemplateMessage
+    data object NothingVisible : TemplateMessage
+}
+
 private data class Local(
     val draft: CanvasSettings? = null,
+    val templateMessage: TemplateMessage? = null,
     val selectedTrackId: String? = null,
     val mode: EditMode = EditMode.MOVE,
     val snap: Boolean = true,
@@ -95,6 +106,7 @@ class LayoutEditorViewModel @Inject constructor(
     canvasFactory: CanvasPreviewFactory,
     proxies: ProxyGenerator,
     settings: AppSettingsRepository,
+    private val templates: LayoutTemplateRepository,
 ) : ViewModel() {
 
     private val projectId: String = checkNotNull(savedStateHandle[ARG_PROJECT_ID])
@@ -103,7 +115,7 @@ class LayoutEditorViewModel @Inject constructor(
 
     val canvasPreview: CanvasPreview = canvasFactory.create()
 
-    val uiState: StateFlow<LayoutUiState> = combine(repository.observe(projectId), local) { project, l ->
+    val uiState: StateFlow<LayoutUiState> = combine(repository.observe(projectId), local, templates.templates) { project, l, saved ->
         val canvas = l.draft ?: project?.canvas
         LayoutUiState(
             project = project,
@@ -120,6 +132,8 @@ class LayoutEditorViewModel @Inject constructor(
             playheadFrames = l.playheadFrames,
             importingImage = l.importingImage,
             imageImportFailed = l.imageImportFailed,
+            savedTemplates = saved.size,
+            templateMessage = l.templateMessage,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, LayoutUiState())
 
@@ -336,6 +350,21 @@ class LayoutEditorViewModel @Inject constructor(
             local.update { it.copy(importingImage = false, imageImportFailed = !ok) }
         }
     }
+
+    /** Saves the layout shown now as a template of the user (SPEC 2.6), for any project. */
+    fun saveTemplate(name: String) {
+        val state = uiState.value
+        val project = state.project ?: return
+        val canvas = state.canvas ?: return
+        viewModelScope.launch {
+            val saved = templates.saveFrom(project.copy(canvas = canvas), name)
+            local.update {
+                it.copy(templateMessage = saved?.let { t -> TemplateMessage.Saved(t.name.orEmpty()) } ?: TemplateMessage.NothingVisible)
+            }
+        }
+    }
+
+    fun dismissTemplateMessage() = local.update { it.copy(templateMessage = null) }
 
     /** Canvas-wide change: keeps the layout (no template freeze) and saves. */
     private fun editCanvas(transform: (CanvasSettings) -> CanvasSettings) {

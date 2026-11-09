@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.feature.layout
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import io.github.higor0227.selfband.core.model.LayoutTemplates
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
@@ -85,6 +96,31 @@ fun LayoutRoute(onBack: () -> Unit, viewModel: LayoutEditorViewModel = hiltViewM
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LayoutEditorScreen(state: LayoutUiState, vm: LayoutEditorViewModel, onBack: () -> Unit) {
+    var naming by rememberSaveable { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val message = state.templateMessage
+    val messageText = when (message) {
+        is TemplateMessage.Saved -> stringResource(R.string.layout_template_saved, message.name)
+        TemplateMessage.NothingVisible -> stringResource(R.string.layout_template_nothing)
+        null -> null
+    }
+    LaunchedEffect(message) {
+        if (messageText != null) {
+            snackbar.showSnackbar(messageText)
+            vm.dismissTemplateMessage()
+        }
+    }
+    if (naming) {
+        val defaultName = stringResource(R.string.layout_template_default_name, state.savedTemplates + 1)
+        SaveTemplateDialog(
+            defaultName = defaultName,
+            onSave = { name ->
+                naming = false
+                vm.saveTemplate(name)
+            },
+            onDismiss = { naming = false },
+        )
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -94,8 +130,14 @@ private fun LayoutEditorScreen(state: LayoutUiState, vm: LayoutEditorViewModel, 
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
                     }
                 },
+                actions = {
+                    if (state.layers.isNotEmpty()) {
+                        TextButton(onClick = { naming = true }) { Text(stringResource(R.string.layout_save_template)) }
+                    }
+                },
             )
         },
+        snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             val project = state.project
@@ -122,6 +164,31 @@ private fun LayoutEditorScreen(state: LayoutUiState, vm: LayoutEditorViewModel, 
             }
         }
     }
+}
+
+/** Name for a new saved template; the layout shown now is what gets saved. */
+@Composable
+private fun SaveTemplateDialog(defaultName: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by rememberSaveable { mutableStateOf(defaultName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.layout_save_template)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.layout_save_template_text), style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(LayoutTemplates.MAX_NAME_LENGTH) },
+                    label = { Text(stringResource(R.string.layout_template_name)) },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.layout_template_save)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } },
+    )
 }
 
 /** TextureView the compositor draws into. */

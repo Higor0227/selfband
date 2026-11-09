@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 6 — Scale and experience (6d done; 6e in progress)
+## Current phase: Phase 7 — Publishing (planning)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Phase 6 is split into 6a (preview proxies), 6b (multi-pass export + tests with 12–16 tracks), 6c (settings: defaults, theme, language, verbose log), 6d (first-run wizard) and 6e (user-saved layout templates); proxies come first because they are the biggest risk of the phase. 6a was confirmed by the owner on 2026-11-08. 6b was confirmed by the owner on 2026-11-08. On 2026-11-08 the owner said to proceed after 6c and after 6d (no test results reported yet). Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Phase 6 is split into 6a (preview proxies), 6b (multi-pass export + tests with 12–16 tracks), 6c (settings: defaults, theme, language, verbose log), 6d (first-run wizard) and 6e (user-saved layout templates); proxies come first because they are the biggest risk of the phase. 6a was confirmed by the owner on 2026-11-08. 6b was confirmed by the owner on 2026-11-08. On 2026-11-08 the owner said to proceed after 6c and after 6d, and then to go to Phase 7 after 6e: **phase 6 is closed** (no test results were reported for 6c–6e; their checklists stay in this file). Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -832,4 +832,32 @@ Use a project with 2+ tracks with video, a trim and some layout/background chang
 ### 6d known issues / notes
 - The wizard calibrates the route that is connected at that moment. Headphones plugged in later make a different route, which the recorder shows as not calibrated, as before.
 - The wizard's calibration is saved without the recorder's "Save to profile" confirmation (a guided first run); "Repetir" overwrites it.
+- Not checked on the phone by me: the owner was using another app, so the APK was only installed (not opened).
+
+### 6e — User-saved layout templates (phase closed by the owner on 2026-11-08)
+- **Save:** Layout editor → "Salvar como template" (top bar), then a name (default "Meu layout N", at most 40 characters).
+  - It saves each visible layer's position and look in track order: frame, z-order, opacity, corners, border.
+  - Hidden layers are not saved. Crops stay with each project's videos, not in the template.
+  - It works from a built-in template too, which saves exactly what is on screen.
+- **Use:** recorder → Canvas card → new "Meus templates" row, with thumbnails drawn from the template data.
+  - A tap applies it to the project as a free layout: tracks take the slots in order and keep their own crops.
+  - Tracks beyond the last slot are hidden; they can be shown again in the editor. With fewer tracks than slots, the extra slots stay empty.
+- **Manage:** press and hold a thumbnail to rename or delete it (deleting asks first).
+- **Templates are data (SPEC 2.6):** stored app-wide in `files/layout-templates.json`, in the same format as the built-in `layout-templates.json`, with an optional `name` and per-slot `styles`.
+  - Applying copies the layout into the project and keeps no link to the template. Deleting or renaming a template never changes a project, and export needs nothing extra.
+- New tests: `SavedTemplatesTest` (7: save order and looks, hidden layers, saving a built-in, apply reproduces the layout, extra or missing tracks, no link to the template, file round trip) and `LayoutTemplateStoreTest` (3). 125 unit tests, 0 failures.
+
+### 6e checklist (owner)
+1. In a project with 2+ video tracks, open Editar layout and make a picture-in-picture: one layer full screen, a small one on top with rounded corners and a border. Tap "Salvar como template", name it "PiP", and save. A message confirms it.
+2. Back in the recorder, Canvas card: "Meus templates" shows a "PiP" thumbnail with the same shape.
+3. Pick Auto, then tap "PiP": the preview returns to the picture-in-picture, with corners and border. The card shows "Layout livre".
+4. In another project (or a new one), tap "PiP": its tracks take the same layout. With 3 tracks, the third is hidden. With 1 track, only the big layer shows.
+5. Switch the format (9:16 → 16:9) after applying: the layout follows in normalized coordinates, and the videos are not distorted.
+6. Press and hold "PiP" → Renomear to "PiP 2"; then press and hold → Excluir → confirm. The thumbnail disappears, and the projects that used it keep their layout.
+7. Export a project that uses the applied layout: the video matches the preview.
+8. Logcat: "Layout template saved / applied / deleted" lines, with no errors.
+
+### 6e known issues / notes
+- A saved template has one layout for every format, stretched in normalized coordinates; the built-in templates can have a variant per format. A layout made for 9:16 and used on 16:9 keeps its relative positions, so squares become wider rectangles. The videos refit their crop and are never distorted.
+- The Canvas card does not highlight a saved template after it is applied, because the project only knows it has a free layout.
 - Not checked on the phone by me: the owner was using another app, so the APK was only installed (not opened).

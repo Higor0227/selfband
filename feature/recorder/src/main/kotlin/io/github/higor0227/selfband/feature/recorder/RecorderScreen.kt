@@ -173,6 +173,9 @@ fun RecorderRoute(
             onAspectRatio = viewModel::setAspectRatio,
             onTemplate = viewModel::setLayoutTemplate,
             onEditLayout = { onOpenLayout(viewModel.projectId) },
+            onUserTemplate = viewModel::applyUserTemplate,
+            onRenameTemplate = viewModel::renameUserTemplate,
+            onDeleteTemplate = viewModel::deleteUserTemplate,
         ),
         mixer = MixerActions(
             onToggleMute = viewModel::toggleMute,

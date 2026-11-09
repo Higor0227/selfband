@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.feature.recorder
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import io.github.higor0227.selfband.core.model.LayoutTemplate
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +52,10 @@ data class CanvasActions(
     val onAspectRatio: (AspectRatio) -> Unit,
     val onTemplate: (String) -> Unit,
     val onEditLayout: () -> Unit,
+    /** A template saved by the user: applied as a free layout. */
+    val onUserTemplate: (String) -> Unit = {},
+    val onRenameTemplate: (id: String, name: String) -> Unit = { _, _ -> },
+    val onDeleteTemplate: (String) -> Unit = {},
 )
 
 /** Canvas format and layout template (SPEC 2.6). Shown while the panel shows the canvas. */
@@ -92,6 +108,36 @@ fun CanvasLayoutCard(state: RecorderUiState, actions: CanvasActions) {
                     )
                 }
             }
+            if (state.userTemplates.isNotEmpty()) {
+                var managing by remember { mutableStateOf<LayoutTemplate?>(null) }
+                Text(stringResource(R.string.canvas_my_templates), style = MaterialTheme.typography.labelLarge)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    state.userTemplates.forEach { template ->
+                        val name = template.name.orEmpty()
+                        TemplateThumb(
+                            label = if (name.length > THUMB_NAME_CHARS) name.take(THUMB_NAME_CHARS - 1) + "…" else name,
+                            description = stringResource(R.string.canvas_user_template, name),
+                            slots = template.slotsFor(project.aspectRatio),
+                            aspect = project.aspectRatio.value,
+                            selected = false,
+                            onClick = { actions.onUserTemplate(template.id) },
+                            onLongClick = { managing = template },
+                        )
+                    }
+                }
+                Text(stringResource(R.string.canvas_my_templates_hint), style = MaterialTheme.typography.bodySmall)
+                managing?.let { template ->
+                    ManageTemplateDialog(
+                        template = template,
+                        onRename = { name -> actions.onRenameTemplate(template.id, name); managing = null },
+                        onDelete = { actions.onDeleteTemplate(template.id); managing = null },
+                        onDismiss = { managing = null },
+                    )
+                }
+            }
             val hidden = CanvasLayout.hiddenByTemplate(project)
             if (hidden > 0) {
                 Text(
@@ -114,6 +160,7 @@ fun CanvasLayoutCard(state: RecorderUiState, actions: CanvasActions) {
 }
 
 /** Miniature of a layout: its slots drawn on a canvas of the project's shape. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TemplateThumb(
     label: String,
@@ -122,12 +169,14 @@ private fun TemplateThumb(
     aspect: Float,
     selected: Boolean,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val outline = if (selected) colors.primary else colors.outline
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick).semantics { contentDescription = description },
+        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .semantics { contentDescription = description },
     ) {
         Box(
             Modifier.height(THUMB_HEIGHT).aspectRatio(aspect)
@@ -150,6 +199,52 @@ private fun TemplateThumb(
 }
 
 private val THUMB_HEIGHT = 44.dp
+private const val THUMB_NAME_CHARS = 10
+
+/** Rename or delete a saved template. Projects that used it keep their layout either way. */
+@Composable
+private fun ManageTemplateDialog(
+    template: LayoutTemplate,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by rememberSaveable(template.id) { mutableStateOf(template.name.orEmpty()) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.canvas_delete_template_title, template.name.orEmpty())) },
+            text = { Text(stringResource(R.string.canvas_delete_template_text)) },
+            confirmButton = { TextButton(onClick = onDelete) { Text(stringResource(R.string.canvas_delete_template)) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(android.R.string.cancel)) } },
+        )
+        return
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.canvas_template_title)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(LayoutTemplates.MAX_NAME_LENGTH) },
+                label = { Text(stringResource(R.string.canvas_template_name)) },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onRename(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.canvas_template_rename)) }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { confirmDelete = true }) {
+                    Text(stringResource(R.string.canvas_delete_template), color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+            }
+        },
+    )
+}
 
 private fun AspectRatio.label(): String = when (this) {
     AspectRatio.PORTRAIT_9_16 -> "9:16"
