@@ -66,6 +66,7 @@ import io.github.higor0227.selfband.core.model.ProxyMode
 import io.github.higor0227.selfband.core.model.ThemeMode
 import io.github.higor0227.selfband.core.model.VideoCodec
 import io.github.higor0227.selfband.core.model.VideoResolution
+import io.github.higor0227.selfband.core.ui.theme.supportsDynamicColor
 import kotlin.math.roundToInt
 
 @Composable
@@ -111,6 +112,13 @@ fun SettingsScreen(
                 Label(stringResource(R.string.settings_theme))
                 Chips(ThemeMode.entries, settings.theme, { stringResource(it.label) }) { theme ->
                     onUpdate { it.copy(theme = theme) }
+                }
+                if (supportsDynamicColor) {
+                    SwitchRow(
+                        stringResource(R.string.settings_dynamic_color),
+                        stringResource(R.string.settings_dynamic_color_hint),
+                        settings.dynamicColor,
+                    ) { on -> onUpdate { it.copy(dynamicColor = on) } }
                 }
                 Label(stringResource(R.string.settings_language))
                 LanguageChips()

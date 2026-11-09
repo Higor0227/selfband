@@ -71,6 +71,8 @@ data class AppSettings(
      */
     val exportDecodersPerPass: Int? = null,
     val theme: ThemeMode = ThemeMode.SYSTEM,
+    /** Wallpaper colors (Material You, Android 12+) instead of the Selfband palette. */
+    val dynamicColor: Boolean = false,
     /** Debug-level lines in the log (SPEC 3.8). */
     val verboseLog: Boolean = false,
     /** Canvas format of new projects. */

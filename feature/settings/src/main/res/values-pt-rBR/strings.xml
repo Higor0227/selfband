@@ -17,6 +17,8 @@
     <string name="settings_theme_system">Sistema</string>
     <string name="settings_theme_light">Claro</string>
     <string name="settings_theme_dark">Escuro</string>
+    <string name="settings_dynamic_color">Cores do papel de parede</string>
+    <string name="settings_dynamic_color_hint">Usa as cores do seu papel de parede (Material You) no lugar das cores do Selfband.</string>
     <string name="settings_language">Idioma</string>
     <string name="settings_language_system">Sistema</string>
     <string name="settings_new_projects">Novos projetos</string>

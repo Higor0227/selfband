@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <resources>
     <!-- Compose draws everything; this only covers the window before the first frame. -->
     <!-- AppCompat parent: needed for the per-app language and night mode (SPEC 2.8). -->
     <style name="Theme.Selfband" parent="Theme.AppCompat.DayNight.NoActionBar" />
-    <color name="ic_launcher_background">#FF5B5FC7</color>
+    <!-- Identity (Phase 7): warm dark behind the coral icon. -->
+    <color name="ic_launcher_background">#FF1E1513</color>
 </resources>

@@ -5,6 +5,8 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.higor0227.selfband.core.project.AppSettingsRepository
 import io.github.higor0227.selfband.core.ui.theme.SelfbandTheme
@@ -23,7 +25,8 @@ class MainActivity : AppCompatActivity() {
         // Already read by SelfbandApplication, so this returns at once.
         val showOnboarding = !runBlocking { settings.get() }.onboardingDone
         setContent {
-            SelfbandTheme {
+            val appSettings by settings.settings.collectAsStateWithLifecycle()
+            SelfbandTheme(dynamicColor = appSettings.dynamicColor) {
                 SelfbandNavHost(showOnboarding)
             }
         }
