@@ -32,6 +32,8 @@ adb logcat -s Selfband:V     # app logs
 
 Minimum Android version: 10 (API 29).
 
+Release builds are minified and signed by GitHub Actions when a version tag is pushed; see [docs/RELEASING.md](docs/RELEASING.md).
+
 ### Testing with a USB audio interface
 
 The phone's USB-C port is usually taken by the audio interface, so use wireless debugging (Android 11+):

@@ -2,7 +2,7 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 7 — Publishing (7a and 7b done; 7c in progress)
+## Current phase: Phase 7 — Publishing (7a–7c done; 7d in progress)
 
 Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Phase 6 is split into 6a (preview proxies), 6b (multi-pass export + tests with 12–16 tracks), 6c (settings: defaults, theme, language, verbose log), 6d (first-run wizard) and 6e (user-saved layout templates); proxies come first because they are the biggest risk of the phase. 6a was confirmed by the owner on 2026-11-08. 6b was confirmed by the owner on 2026-11-08. On 2026-11-08 the owner said to proceed after 6c and after 6d, and then to go to Phase 7 after 6e: **phase 6 is closed** (no test results were reported for 6c–6e; their checklists stay in this file). Phase 7 is split into 7a (icon and visual identity), 7b (recorder performance), 7c (signed release build via CI) and 7d (privacy policy, store listing, F-Droid evaluation). Scope chosen by the owner on 2026-11-08: publishing plus the recorder optimization; the Studio/recorder split and the display latency measurement move to "Future". Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
@@ -902,3 +902,36 @@ Use a project with 2+ tracks with video, a trim and some layout/background chang
 ### 7b known issues / notes
 - The camera preview and the canvas preview are drawn by GL/camera surfaces and were not affected by the recompositions; this change only reduces the Compose UI work around them.
 - Not checked on the phone by me: the phone was on the launcher, so I only installed it.
+
+### 7c — Signed release build via CI (owner said to proceed on 2026-11-08)
+- **Signing from the environment only:** `app/build.gradle.kts` signs the release when `SELFBAND_KEYSTORE_FILE`, `SELFBAND_KEYSTORE_PASSWORD`, `SELFBAND_KEY_ALIAS` and `SELFBAND_KEY_PASSWORD` are set. No key or password is in the repository.
+  - Without them the release build is **unsigned**, which is what F-Droid expects.
+  - `-Pselfband.debugSignedRelease=true` signs it with the debug key for local testing only.
+- **Versions** stay in `app/build.gradle.kts` (`versionName`, `versionCode = major*10000 + minor*100 + patch`). The release job fails if the tag is not `v<versionName>`.
+  - This differs from "version from the tag", which was the earlier idea. Keeping it in the build file is what F-Droid reads to detect updates, and the check keeps tag and code from drifting apart.
+- **Release build:** R8 minify plus **resource shrinking**, and the native symbol table goes into the app bundle (for Play Console crash reports).
+  - The app module now uses the same pinned NDK as `:core:audio`. Before, the packaging step could not strip the native libraries, so **the release APK went from 44 MB to 9 MB** (libc++_shared alone was 9.5 MB per ABI).
+- **CI** (`.github/workflows/android.yml`):
+  - Every push also builds the unsigned release, so an R8 problem shows up early.
+  - Pushing a tag `v*` runs the new `release` job: tag check → decode the key from the `SELFBAND_KEYSTORE_BASE64` secret → signed APK and AAB → `SHA256SUMS` → a **draft** GitHub release with the APK. The AAB goes to the workflow artifacts.
+  - Nothing goes public until you publish the draft.
+- **docs/RELEASING.md:** how to create the key (keytool in PowerShell), back it up, register the four secrets, and make a release. It also covers Play App Signing (the CI key is then only the upload key). The README links to it.
+- Checked locally:
+  - a release signed with a throwaway keystore (`apksigner` shows its certificate; the keystore was deleted afterwards);
+  - the debug-signed release;
+  - 125 unit tests, 0 failures.
+- **Installed on the phone: the minified release build** (debug-signed, non-debuggable), over the debug build, keeping its data.
+
+### 7c checklist (owner)
+1. On the phone, use the installed **release** build (the minified one) for a quick full pass: open a project, record a take with the camera, play back, change something in the mixer, export a short MP4 and share it. R8 problems show up as crashes or as settings, profiles or templates that do not load. If it crashes, send me `adb logcat -d -s Selfband:V AndroidRuntime:E`.
+2. Settings, the wizard and the language switch still work in the release build.
+3. To test the CI release:
+   - Create the key and register the secrets as described in `docs/RELEASING.md`.
+   - Put the repository on github.com/higor0227/selfband (no remote is set up yet; I can add the remote and push if you want).
+   - Push the tag `v0.0.1`. The `release` job should create a draft release with `selfband-0.0.1.apk`.
+4. The APK from the draft release installs on a phone without the debug build. It cannot be installed over the debug or debug-signed build, because the key is different.
+
+### 7c known issues / notes
+- To go back to the debug build on the phone, run `./gradlew installDebug` (same key, so the data is kept).
+- The GitHub release APK is universal (3 ABIs, ~9 MB). Play builds per-device APKs from the AAB.
+- Not opened on the phone by me: the owner was using WhatsApp, so I only installed it.
