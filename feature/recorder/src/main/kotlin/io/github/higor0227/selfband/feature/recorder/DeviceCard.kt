@@ -91,9 +91,10 @@ internal fun DeviceCard(
             }
 
             // Input level and digital gain.
-            LevelMeter(s.peakLeft)
+            val live = LocalLiveStatus.current
+            LevelMeter({ live.value.peakLeft })
             if (s.inputChannels >= 2) {
-                LevelMeter(s.peakRight)
+                LevelMeter({ live.value.peakRight })
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ChannelChip(R.string.channel_1, RecordChannelMode.FIRST, state, onChannelMode)
                     ChannelChip(R.string.channel_2, RecordChannelMode.SECOND, state, onChannelMode)

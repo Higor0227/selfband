@@ -170,8 +170,9 @@ data class RecorderUiState(
     val transport: TransportState get() = status.transport
     val isIdle: Boolean get() = transport == TransportState.IDLE
 
-    fun trackPeak(trackId: String): Float =
-        status.trackPeaks.getOrNull(engineTrackIds.indexOf(trackId)) ?: 0f
+    /** Peak of [trackId] in [live] (the live status, not [status], which has no meters). */
+    fun trackPeak(live: EngineStatus, trackId: String): Float =
+        live.trackPeaks.getOrNull(engineTrackIds.indexOf(trackId)) ?: 0f
 }
 
 @OptIn(FlowPreview::class)
@@ -218,7 +219,13 @@ class RecorderViewModel @Inject constructor(
     private var videoRecording = false
 
     val uiState: StateFlow<RecorderUiState> =
-        combine(local, repository.observe(projectId), engine.status, profiles.profiles, camera.state) { l, project, status, all, cam ->
+        combine(
+            local,
+            repository.observe(projectId),
+            engine.status.map { it.withoutLiveValues() }.distinctUntilChanged(),
+            profiles.profiles,
+            camera.state,
+        ) { l, project, status, all, cam ->
             l.copy(
                 project = project,
                 status = status,
@@ -226,6 +233,9 @@ class RecorderViewModel @Inject constructor(
                 camera = cam,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecorderUiState())
+
+    /** Position and meters as they change; see [LocalLiveStatus]. */
+    val liveStatus: StateFlow<EngineStatus> = engine.status
 
     init {
         viewModelScope.launch {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.core.ui.component
 
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,4 +69,27 @@ fun LevelMeter(peak: Float, modifier: Modifier = Modifier) {
     ) {
         Box(Modifier.fillMaxHeight().fillMaxWidth(fraction).background(color))
     }
+}
+
+/**
+ * Same meter, reading [peak] while drawing: a level that changes many times a second redraws
+ * only this bar and never recomposes the screen around it.
+ */
+@Composable
+fun LevelMeter(peak: () -> Float, modifier: Modifier = Modifier) {
+    val normal = MaterialTheme.colorScheme.primary
+    val clipping = MaterialTheme.colorScheme.error
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(10.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .drawBehind {
+                val p = peak()
+                val db = if (p > 0f) 20f * log10(p) else -120f
+                val fraction = ((db + 60f) / 60f).coerceIn(0f, 1f)
+                drawRect(if (db > -1f) clipping else normal, size = Size(size.width * fraction, size.height))
+            },
+    )
 }

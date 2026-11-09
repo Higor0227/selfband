@@ -173,7 +173,7 @@ fun CameraPanel(
 private fun PlayheadRow(state: RecorderUiState, onPlayhead: (Long) -> Unit) {
     val project = state.project ?: return
     val length = project.lengthFrames
-    val position = if (state.isIdle) state.playheadFrames else state.status.positionFrames
+    val position = if (state.isIdle) state.playheadFrames else LocalLiveStatus.current.value.positionFrames
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -2,7 +2,7 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 7 — Publishing (7a done; 7b in progress)
+## Current phase: Phase 7 — Publishing (7a and 7b done; 7c in progress)
 
 Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Phase 6 is split into 6a (preview proxies), 6b (multi-pass export + tests with 12–16 tracks), 6c (settings: defaults, theme, language, verbose log), 6d (first-run wizard) and 6e (user-saved layout templates); proxies come first because they are the biggest risk of the phase. 6a was confirmed by the owner on 2026-11-08. 6b was confirmed by the owner on 2026-11-08. On 2026-11-08 the owner said to proceed after 6c and after 6d, and then to go to Phase 7 after 6e: **phase 6 is closed** (no test results were reported for 6c–6e; their checklists stay in this file). Phase 7 is split into 7a (icon and visual identity), 7b (recorder performance), 7c (signed release build via CI) and 7d (privacy policy, store listing, F-Droid evaluation). Scope chosen by the owner on 2026-11-08: publishing plus the recorder optimization; the Studio/recorder split and the display latency measurement move to "Future". Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
@@ -883,3 +883,22 @@ Use a project with 2+ tracks with video, a trim and some layout/background chang
 ### 7a known issues / notes
 - The palette was derived by hand from the coral seed with Material 3 tones, not with the official Material Theme Builder; individual colors can be adjusted in `Theme.kt`.
 - Not checked on the phone by me: the phone was on the launcher, so I only installed it (that is what you chose last time in this situation).
+
+### 7b — Recorder performance (owner said to proceed on 2026-11-08)
+- **Cause:** the engine status (position, input and track meters, master meters, limiter gain) changes about 20 times a second, and it was part of the recorder screen state. So the **whole recorder screen recomposed ~20×/s, even when stopped**, because the input meters are always live.
+- **Fix:** the screen state now keeps only the engine values that change rarely (open/closed, transport, device, channels…). The fast values travel separately (`LocalLiveStatus`) and are read only by the small pieces that show them:
+  - input, track and master meters read the level **while drawing** (they only redraw the bar);
+  - the timeline and camera-panel playheads, the transport clock (time, beat flash, count-in) and the limiter text are their own small composables.
+- **Measurement aid:** with Configurações → "Log detalhado" on, the recorder logs `recompose recorder: N/s` (tag `Selfband`) at most every 5 s, and only when it recomposes. With the fix, it stays silent (or shows a low number) while stopped and while playing; before, it showed about 20/s.
+- No behavior change intended. 125 unit tests, 0 failures (no new tests: UI-only change).
+
+### 7b checklist (owner)
+1. Turn on Configurações → "Log detalhado", open a project in the recorder and run `adb logcat -s Selfband:V`. While stopped and during playback/recording there should be no `recompose recorder` line, or only low numbers after you touch something (before 7b it would print ~20/s every 5 s).
+2. Input meters (device card) still move with the sound when stopped; track meters and the master meters + limiter text in the mixer move during playback.
+3. The time display, beat flash (metronome on) and count-in still update during playback/recording.
+4. The playhead moves in the timeline and in the camera panel during playback, and dragging/tapping it when stopped still works.
+5. Optional, CPU: `adb shell top -d 2 | findstr selfband` (PowerShell) with the recorder stopped, before and after this build. It should use noticeably less CPU while idle. Scrolling the recorder should feel smoother.
+
+### 7b known issues / notes
+- The camera preview and the canvas preview are drawn by GL/camera surfaces and were not affected by the recompositions; this change only reduces the Compose UI work around them.
+- Not checked on the phone by me: the phone was on the launcher, so I only installed it.

@@ -139,7 +139,9 @@ private fun TimelineBody(state: RecorderUiState, project: Project, lanes: List<L
     LaunchedEffect(project.trimStartFrame, project.trimEndFrame) { trimStartDraft = -1L; trimEndDraft = -1L }
     val trimStart = if (trimStartDraft >= 0) trimStartDraft else project.trimStart
     val trimEnd = if (trimEndDraft >= 0) trimEndDraft else project.trimEnd
-    val position = if (state.isIdle) state.playheadFrames else state.status.positionFrames
+    val live = LocalLiveStatus.current
+    val idle = state.isIdle
+    val playhead = state.playheadFrames
 
     val density = LocalDensity.current
     val rulerPx = with(density) { 28.dp.toPx() }
@@ -336,7 +338,8 @@ private fun TimelineBody(state: RecorderUiState, project: Project, lanes: List<L
         }
         drawPath(handle, colors.tertiary)
 
-        // Playhead.
+        // Playhead, read here so playback only redraws the timeline.
+        val position = if (idle) playhead else live.value.positionFrames
         val px = g.xOf(position)
         if (px in 0f..w) drawLine(colors.error, Offset(px, 0f), Offset(px, size.height), strokeWidth = 2.dp.toPx())
     }

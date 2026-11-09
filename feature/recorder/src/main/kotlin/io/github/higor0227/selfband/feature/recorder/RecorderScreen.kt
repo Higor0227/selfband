@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.feature.recorder
 
+import androidx.compose.runtime.CompositionLocalProvider
 import io.github.higor0227.selfband.core.audio.calibration.CalibrationTask
 import android.Manifest
 import android.content.pm.ActivityInfo
@@ -77,6 +78,7 @@ import io.github.higor0227.selfband.core.model.AlignmentMath
 import io.github.higor0227.selfband.core.model.Levels
 import io.github.higor0227.selfband.core.model.MetronomeSettings
 import io.github.higor0227.selfband.core.model.Track
+import io.github.higor0227.selfband.core.ui.component.RecompositionLog
 import io.github.higor0227.selfband.core.ui.component.LevelMeter
 import java.util.Locale
 
@@ -113,96 +115,99 @@ fun RecorderRoute(
     }
 
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    RecorderScreen(
-        state = state,
-        permissionGranted = granted,
-        onBack = onBack,
-        onExport = { onOpenExport(viewModel.projectId) },
-        onTogglePlay = viewModel::togglePlay,
-        onRecord = viewModel::recordNewTrack,
-        onStop = viewModel::stop,
-        onToggleMute = viewModel::toggleMute,
-        onPreviewVolume = viewModel::previewTrackVolume,
-        onSetVolume = viewModel::setTrackVolume,
-        onSetManualOffset = viewModel::setManualOffsetMs,
-        onDeleteTrack = viewModel::deleteTrack,
-        onUpdateMetronome = viewModel::updateMetronome,
-        onTapTempo = viewModel::tapTempo,
-        onChannelMode = viewModel::setChannelMode,
-        onDismissNotice = viewModel::dismissNotice,
-        device = DeviceActions(
-            onPreviewInputGain = viewModel::previewInputGain,
-            onSetInputGain = viewModel::setInputGain,
-            onMonitoring = viewModel::setMonitoring,
-            onPreviewMonitorGain = viewModel::previewMonitorGain,
-            onSetMonitorGain = viewModel::setMonitorGain,
-            onCalibrate = viewModel::openCalibration,
-            onStartCalibration = viewModel::startCalibration,
-            onCancelCalibration = viewModel::cancelCalibration,
-            onSaveCalibration = viewModel::saveCalibration,
-            onCloseCalibration = viewModel::closeCalibration,
-        ),
-        video = VideoActions(
-            onPreviewSurface = viewModel::setPreviewSurface,
-            onSwitchLens = viewModel::switchLens,
-            onVideoEnabled = viewModel::setVideoEnabled,
-            onCheckSync = viewModel::openSyncCheck,
-            onPickSyncFrame = viewModel::pickSyncFrame,
-            onSetVideoOffset = viewModel::setVideoOffsetMs,
-            onCloseSyncCheck = viewModel::closeSyncCheck,
-            canvas = viewModel.canvasPreview,
-            onPanelMode = viewModel::setPanelMode,
-            onPlayhead = viewModel::setPlayhead,
-        ),
-        cameraSettings = CameraSettingsActions(
-            onResolution = viewModel::setResolution,
-            onFrameRate = viewModel::setFrameRate,
-            onStabilization = viewModel::setStabilization,
-            onGrid = viewModel::setGrid,
-            onToggleLock = viewModel::toggleLock,
-            onGhostTrack = viewModel::setGhostTrack,
-            onPreviewGhostOpacity = {},
-            onSetGhostOpacity = viewModel::setGhostOpacity,
-        ),
-        takes = TakeActions(
-            onRecordTake = viewModel::recordNewTake,
-            onSetActiveTake = viewModel::setActiveTake,
-            onDeleteTake = viewModel::deleteTake,
-        ),
-        canvasActions = CanvasActions(
-            onAspectRatio = viewModel::setAspectRatio,
-            onTemplate = viewModel::setLayoutTemplate,
-            onEditLayout = { onOpenLayout(viewModel.projectId) },
-            onUserTemplate = viewModel::applyUserTemplate,
-            onRenameTemplate = viewModel::renameUserTemplate,
-            onDeleteTemplate = viewModel::deleteUserTemplate,
-        ),
-        mixer = MixerActions(
+    val live = viewModel.liveStatus.collectAsStateWithLifecycle()
+    CompositionLocalProvider(LocalLiveStatus provides live) {
+        RecorderScreen(
+            state = state,
+            permissionGranted = granted,
+            onBack = onBack,
+            onExport = { onOpenExport(viewModel.projectId) },
+            onTogglePlay = viewModel::togglePlay,
+            onRecord = viewModel::recordNewTrack,
+            onStop = viewModel::stop,
             onToggleMute = viewModel::toggleMute,
-            onToggleSolo = viewModel::toggleSolo,
             onPreviewVolume = viewModel::previewTrackVolume,
             onSetVolume = viewModel::setTrackVolume,
-            onPreviewPan = viewModel::previewTrackPan,
-            onSetPan = viewModel::setTrackPan,
-            onPreviewMaster = viewModel::previewMasterVolume,
-            onSetMaster = viewModel::setMasterVolume,
-            onLimiter = viewModel::setLimiter,
-            onReset = viewModel::resetMix,
-            onTogglePhase = viewModel::togglePhase,
-            onPreviewEq = viewModel::previewTrackEq,
-            onSetEq = viewModel::setTrackEq,
-            onPreviewSend = viewModel::previewTrackSend,
-            onSetSend = viewModel::setTrackSend,
-            onPreviewReverb = viewModel::previewReverb,
-            onSetReverb = viewModel::setReverb,
-        ),
-        timeline = TimelineActions(
-            onSetOffsetFrames = viewModel::setManualOffsetFrames,
-            onSetTrim = viewModel::setTrim,
-            onClearTrim = viewModel::clearTrim,
-            onPlayhead = viewModel::setPlayhead,
-        ),
-    )
+            onSetManualOffset = viewModel::setManualOffsetMs,
+            onDeleteTrack = viewModel::deleteTrack,
+            onUpdateMetronome = viewModel::updateMetronome,
+            onTapTempo = viewModel::tapTempo,
+            onChannelMode = viewModel::setChannelMode,
+            onDismissNotice = viewModel::dismissNotice,
+            device = DeviceActions(
+                onPreviewInputGain = viewModel::previewInputGain,
+                onSetInputGain = viewModel::setInputGain,
+                onMonitoring = viewModel::setMonitoring,
+                onPreviewMonitorGain = viewModel::previewMonitorGain,
+                onSetMonitorGain = viewModel::setMonitorGain,
+                onCalibrate = viewModel::openCalibration,
+                onStartCalibration = viewModel::startCalibration,
+                onCancelCalibration = viewModel::cancelCalibration,
+                onSaveCalibration = viewModel::saveCalibration,
+                onCloseCalibration = viewModel::closeCalibration,
+            ),
+            video = VideoActions(
+                onPreviewSurface = viewModel::setPreviewSurface,
+                onSwitchLens = viewModel::switchLens,
+                onVideoEnabled = viewModel::setVideoEnabled,
+                onCheckSync = viewModel::openSyncCheck,
+                onPickSyncFrame = viewModel::pickSyncFrame,
+                onSetVideoOffset = viewModel::setVideoOffsetMs,
+                onCloseSyncCheck = viewModel::closeSyncCheck,
+                canvas = viewModel.canvasPreview,
+                onPanelMode = viewModel::setPanelMode,
+                onPlayhead = viewModel::setPlayhead,
+            ),
+            cameraSettings = CameraSettingsActions(
+                onResolution = viewModel::setResolution,
+                onFrameRate = viewModel::setFrameRate,
+                onStabilization = viewModel::setStabilization,
+                onGrid = viewModel::setGrid,
+                onToggleLock = viewModel::toggleLock,
+                onGhostTrack = viewModel::setGhostTrack,
+                onPreviewGhostOpacity = {},
+                onSetGhostOpacity = viewModel::setGhostOpacity,
+            ),
+            takes = TakeActions(
+                onRecordTake = viewModel::recordNewTake,
+                onSetActiveTake = viewModel::setActiveTake,
+                onDeleteTake = viewModel::deleteTake,
+            ),
+            canvasActions = CanvasActions(
+                onAspectRatio = viewModel::setAspectRatio,
+                onTemplate = viewModel::setLayoutTemplate,
+                onEditLayout = { onOpenLayout(viewModel.projectId) },
+                onUserTemplate = viewModel::applyUserTemplate,
+                onRenameTemplate = viewModel::renameUserTemplate,
+                onDeleteTemplate = viewModel::deleteUserTemplate,
+            ),
+            mixer = MixerActions(
+                onToggleMute = viewModel::toggleMute,
+                onToggleSolo = viewModel::toggleSolo,
+                onPreviewVolume = viewModel::previewTrackVolume,
+                onSetVolume = viewModel::setTrackVolume,
+                onPreviewPan = viewModel::previewTrackPan,
+                onSetPan = viewModel::setTrackPan,
+                onPreviewMaster = viewModel::previewMasterVolume,
+                onSetMaster = viewModel::setMasterVolume,
+                onLimiter = viewModel::setLimiter,
+                onReset = viewModel::resetMix,
+                onTogglePhase = viewModel::togglePhase,
+                onPreviewEq = viewModel::previewTrackEq,
+                onSetEq = viewModel::setTrackEq,
+                onPreviewSend = viewModel::previewTrackSend,
+                onSetSend = viewModel::setTrackSend,
+                onPreviewReverb = viewModel::previewReverb,
+                onSetReverb = viewModel::setReverb,
+            ),
+            timeline = TimelineActions(
+                onSetOffsetFrames = viewModel::setManualOffsetFrames,
+                onSetTrim = viewModel::setTrim,
+                onClearTrim = viewModel::clearTrim,
+                onPlayhead = viewModel::setPlayhead,
+            ),
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -232,6 +237,8 @@ fun RecorderScreen(
     mixer: MixerActions,
     timeline: TimelineActions,
 ) {
+    val live = LocalLiveStatus.current
+    RecompositionLog("recorder")
     // Ghost opacity follows the slider live; it is saved when the slider is released.
     val savedOpacity = state.cameraSettings.ghostOpacity
     var ghostOpacity by remember(savedOpacity) { mutableFloatStateOf(savedOpacity) }
@@ -362,7 +369,7 @@ fun RecorderScreen(
                     isRecording = state.recordingTrackId == track.id,
                     canEdit = state.isIdle,
                     canRecord = state.isIdle && state.status.isOpen,
-                    peak = if (state.isIdle) 0f else state.trackPeak(track.id),
+                    peak = { if (state.isIdle) 0f else state.trackPeak(live.value, track.id) },
                     onToggleMute = { onToggleMute(track.id) },
                     onPreviewVolume = { onPreviewVolume(track.id, it) },
                     onSetVolume = { onSetVolume(track.id, it) },
@@ -382,6 +389,42 @@ fun RecorderScreen(
     }
 }
 
+/** Time, beat flash and count-in: the only part of the transport that follows the live position. */
+@Composable
+private fun TransportClock(state: RecorderUiState, sampleRate: Int) {
+    val s = LocalLiveStatus.current.value
+    val metronome = state.project?.metronome ?: MetronomeSettings()
+    val active = state.transport != TransportState.IDLE
+    val inCountIn = active && s.positionFrames < 0
+    val framesPerBeat = metronome.framesPerBeat(sampleRate)
+    val beat = metronome.beatAt(s.positionFrames, sampleRate)
+    val beatInBar = Math.floorMod(beat, metronome.beatsPerBar.toLong()).toInt()
+    val phase = s.positionFrames - beat * framesPerBeat
+    // Visual click: lit for the first quarter of each beat (status refreshes every 50 ms).
+    val flash = metronome.visualFlash && active && (metronome.enabled || inCountIn) &&
+        phase < framesPerBeat / 4
+    val flashColor = when {
+        !flash -> Color.Transparent
+        beatInBar == 0 && metronome.accentFirstBeat -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.primary
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            formatTime(s.positionFrames, sampleRate),
+            style = MaterialTheme.typography.displaySmall,
+            fontFamily = FontFamily.Monospace,
+        )
+        Box(Modifier.width(28.dp).height(28.dp).clip(RoundedCornerShape(14.dp)).background(flashColor))
+    }
+    if (inCountIn) {
+        Text(
+            stringResource(R.string.counting_in, beatInBar + 1, metronome.beatsPerBar),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
 @Composable
 private fun TransportCard(
     state: RecorderUiState,
@@ -393,36 +436,7 @@ private fun TransportCard(
     val sampleRate = state.project?.sampleRate ?: 48_000
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            val metronome = state.project?.metronome ?: MetronomeSettings()
-            val active = state.transport != TransportState.IDLE
-            val inCountIn = active && s.positionFrames < 0
-            val framesPerBeat = metronome.framesPerBeat(sampleRate)
-            val beat = metronome.beatAt(s.positionFrames, sampleRate)
-            val beatInBar = Math.floorMod(beat, metronome.beatsPerBar.toLong()).toInt()
-            val phase = s.positionFrames - beat * framesPerBeat
-            // Visual click: lit for the first quarter of each beat (status refreshes every 50 ms).
-            val flash = metronome.visualFlash && active && (metronome.enabled || inCountIn) &&
-                phase < framesPerBeat / 4
-            val flashColor = when {
-                !flash -> Color.Transparent
-                beatInBar == 0 && metronome.accentFirstBeat -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.primary
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    formatTime(s.positionFrames, sampleRate),
-                    style = MaterialTheme.typography.displaySmall,
-                    fontFamily = FontFamily.Monospace,
-                )
-                Box(Modifier.width(28.dp).height(28.dp).clip(RoundedCornerShape(14.dp)).background(flashColor))
-            }
-            if (inCountIn) {
-                Text(
-                    stringResource(R.string.counting_in, beatInBar + 1, metronome.beatsPerBar),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
+            TransportClock(state, sampleRate)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (state.transport) {
                     TransportState.IDLE -> {
@@ -468,7 +482,7 @@ private fun TrackCard(
     isRecording: Boolean,
     canEdit: Boolean,
     canRecord: Boolean,
-    peak: Float,
+    peak: () -> Float,
     onToggleMute: () -> Unit,
     onPreviewVolume: (Double) -> Unit,
     onSetVolume: (Double) -> Unit,

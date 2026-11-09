@@ -86,13 +86,14 @@ fun MixerCard(state: RecorderUiState, actions: MixerActions) {
                 Text(stringResource(R.string.no_tracks), style = MaterialTheme.typography.bodyMedium)
             }
             val anySolo = Mixing.anySolo(project)
+            val engineLive = LocalLiveStatus.current
             project.tracks.forEachIndexed { index, track ->
                 MixerTrackRow(
                     index = index,
                     track = track,
                     sampleRate = project.sampleRate,
                     silencedBySolo = anySolo && !track.solo && !track.muted,
-                    peak = if (live) state.trackPeak(track.id) else 0f,
+                    peak = { if (live) state.trackPeak(engineLive.value, track.id) else 0f },
                     actions = actions,
                 )
                 HorizontalDivider()
@@ -110,7 +111,7 @@ private fun MixerTrackRow(
     track: Track,
     sampleRate: Int,
     silencedBySolo: Boolean,
-    peak: Float,
+    peak: () -> Float,
     actions: MixerActions,
 ) {
     var eqOpen by remember { mutableStateOf(false) }
@@ -303,16 +304,16 @@ private fun ReverbPreset.labelRes(): Int = when (this) {
 @Composable
 private fun MasterSection(state: RecorderUiState, live: Boolean, actions: MixerActions) {
     val mixer = state.project?.mixer ?: return
-    val status = state.status
+    val engineLive = LocalLiveStatus.current
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(stringResource(R.string.mixer_master), style = MaterialTheme.typography.labelLarge)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("L", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(14.dp))
-            LevelMeter(if (live) status.masterPeakLeft else 0f)
+            LevelMeter({ if (live) engineLive.value.masterPeakLeft else 0f })
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("R", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(14.dp))
-            LevelMeter(if (live) status.masterPeakRight else 0f)
+            LevelMeter({ if (live) engineLive.value.masterPeakRight else 0f })
         }
         var volume by remember(mixer.masterVolumeDb) { mutableFloatStateOf(mixer.masterVolumeDb.toFloat()) }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -332,18 +333,7 @@ private fun MasterSection(state: RecorderUiState, live: Boolean, actions: MixerA
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.mixer_limiter), style = MaterialTheme.typography.bodyMedium)
-                val reduction = if (live && mixer.limiter && status.limiterGain < 0.999f) {
-                    -20f * log10(status.limiterGain.coerceAtLeast(1e-4f))
-                } else 0f
-                Text(
-                    if (!mixer.limiter) stringResource(R.string.mixer_limiter_off)
-                    else if (reduction >= 0.1f) stringResource(R.string.mixer_limiting,
-                        String.format(Locale.ROOT, "%.1f", reduction))
-                    else stringResource(R.string.mixer_limiter_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (reduction >= 0.1f) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                LimiterStatus(mixer.limiter, live)
             }
             Spacer(Modifier.width(8.dp))
             Switch(checked = mixer.limiter, onCheckedChange = actions.onLimiter)
@@ -367,4 +357,18 @@ private fun formatPan(pan: Float): String {
         pan < 0 -> String.format(Locale.ROOT, "L %3d", percent)
         else -> String.format(Locale.ROOT, "R %3d", percent)
     }
+}
+
+/** Limiter state text: the only part of the master section that follows the live gain reduction. */
+@Composable
+private fun LimiterStatus(on: Boolean, live: Boolean) {
+    val gain = LocalLiveStatus.current.value.limiterGain
+    val reduction = if (live && on && gain < 0.999f) -20f * log10(gain.coerceAtLeast(1e-4f)) else 0f
+    Text(
+        if (!on) stringResource(R.string.mixer_limiter_off)
+        else if (reduction >= 0.1f) stringResource(R.string.mixer_limiting, String.format(Locale.ROOT, "%.1f", reduction))
+        else stringResource(R.string.mixer_limiter_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = if (reduction >= 0.1f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
