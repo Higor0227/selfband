@@ -8,6 +8,10 @@
     <string name="settings_proxies_auto_hint">From %1$d videos, or when this device cannot decode the originals in time</string>
     <string name="settings_proxies_always">Always</string>
     <string name="settings_proxies_off">Never</string>
+    <string name="settings_export_decoders">Videos per export pass</string>
+    <string name="settings_export_decoders_hint">With more videos than this, the export composes the video in several passes (slower). Lower it if exporting a project with many tracks fails.</string>
+    <string name="settings_export_decoders_auto">Automatic</string>
+    <string name="settings_export_decoders_auto_hint">What this device\'s decoders declare</string>
     <plurals name="settings_proxies_pending">
         <item quantity="one">Making %1$d proxy…</item>
         <item quantity="other">Making %1$d proxies…</item>

@@ -100,14 +100,13 @@ interface VideoEncoders {
     fun bitRateRange(codec: VideoCodec, width: Int, height: Int, frameRate: Int): IntRange?
 
     /**
-     * Whether all of [projectId]'s videos can be decoded at the same time, as the export needs.
-     * Null when they fit. Reads the files: call off the main thread.
+     * Passes the video export of [projectId] with [options] will take (SPEC 3.5): 1 when all
+     * videos are decoded at once, more when it composes in several passes, 0 when this device
+     * cannot decode enough videos at once. Null if the project is gone. Reads the files: call
+     * off the main thread. The export may still need more passes if a decoder fails to start.
      */
-    suspend fun decoderLimit(projectId: String): DecoderLimit?
+    suspend fun videoPasses(projectId: String, options: VideoOptions): Int?
 }
-
-/** More videos ([DecoderLimit.needed]) than simultaneous decoders of their kind ([DecoderLimit.available]). */
-typealias DecoderLimit = io.github.higor0227.selfband.core.video.DecoderLimit
 
 enum class ExportFailure {
     /** Nothing to export: no recorded audio, or an empty trim. */
@@ -135,6 +134,9 @@ sealed interface ExportState {
         val stemCount: Int = 0,
         /** 0..1 over the whole export. */
         val progress: Float = 0f,
+        /** 1-based composition pass while [step] is VIDEO, and their number (SPEC 3.5). */
+        val pass: Int = 0,
+        val passCount: Int = 0,
     ) : ExportState
 
     data class Done(

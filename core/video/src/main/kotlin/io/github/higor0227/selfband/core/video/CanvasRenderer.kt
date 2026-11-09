@@ -22,3 +22,9 @@ interface CanvasRendererFactory {
     /** Renders [scene] into [surface], which is [width] × [height] pixels (the canvas fills it). */
     fun create(scene: CanvasScene, surface: Surface, width: Int, height: Int): CanvasRenderer
 }
+
+/**
+ * A video decoder could not be started although the codec declares room for it (memory or
+ * hardware limits): [opened] decoders were running. The export retries with fewer per pass.
+ */
+class DecoderStartException(val opened: Int, cause: Throwable) : Exception("decoder ${opened + 1} could not start", cause)

@@ -122,12 +122,14 @@ internal fun VideoCard(state: ExportUiState, fileName: String, actions: VideoAct
                 if (modes != null && modes.size < VideoCodec.entries.size * VideoResolution.entries.size * VideoOptions.FRAME_RATES.size) {
                     Hint(stringResource(R.string.export_unsupported_hint))
                 }
-                state.decoderLimit?.let {
-                    Text(
-                        stringResource(R.string.export_decoder_limit, it.needed, it.available),
+                when (val passes = state.videoPasses) {
+                    null, 1 -> Unit
+                    0 -> Text(
+                        stringResource(R.string.export_decoder_limit),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    else -> Hint(stringResource(R.string.export_passes_hint, passes))
                 }
             }
             Text(stringResource(R.string.export_destination, "Movies/Selfband/$fileName.mp4"), style = MaterialTheme.typography.bodySmall)

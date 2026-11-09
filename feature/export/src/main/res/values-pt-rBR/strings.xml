@@ -18,7 +18,8 @@
     <string name="export_video_summary">%1$d×%2$d · %3$s Mbps · cerca de %4$s</string>
     <string name="export_fps_repeat">Os vídeos foram gravados a %1$d fps: em %2$d fps os quadros se repetem e o arquivo fica maior.</string>
     <string name="export_unsupported_hint">Opções que este aparelho não consegue codificar ficam desativadas.</string>
-    <string name="export_decoder_limit">Este projeto tem %1$d vídeos, mas este aparelho decodifica no máximo %2$d ao mesmo tempo. Por enquanto, exporte com menos trilhas de vídeo (a composição em várias passadas vem numa próxima fase).</string>
+    <string name="export_decoder_limit">Este aparelho não consegue decodificar vídeos suficientes ao mesmo tempo para exportar este projeto.</string>
+    <string name="export_passes_hint">Mais vídeos do que este aparelho decodifica de uma vez: o vídeo será composto em %1$d passadas (mais lento).</string>
     <string name="export_audio">Áudio</string>
     <string name="export_mix_wav">Mix (WAV)</string>
     <string name="export_mix_wav_hint">O mix estéreo exatamente como você ouve, com mixer, EQ, reverb e limitador. O metrônomo nunca é exportado.</string>
@@ -31,6 +32,7 @@
     <string name="export_start">Exportar</string>
     <string name="export_nothing">Ainda não há nada gravado para exportar.</string>
     <string name="export_running_video">Renderizando o vídeo…</string>
+    <string name="export_running_video_pass">Renderizando o vídeo (passada %1$d de %2$d)…</string>
     <string name="export_running_mix">Renderizando o mix…</string>
     <string name="export_running_stems">Renderizando stems (trilha %1$d de %2$d)…</string>
     <string name="export_cancel">Cancelar</string>

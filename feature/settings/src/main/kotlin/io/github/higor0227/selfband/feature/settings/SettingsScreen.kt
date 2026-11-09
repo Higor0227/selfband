@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.higor0227.selfband.core.model.AppSettings
 import io.github.higor0227.selfband.core.model.ProxyMode
 import io.github.higor0227.selfband.core.model.Proxies
 
@@ -43,10 +44,10 @@ fun SettingsRoute(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    SettingsScreen(state, onBack, onOpenDiagnostics, viewModel::setProxyMode)
+    SettingsScreen(state, onBack, onOpenDiagnostics, viewModel::setProxyMode, viewModel::setExportDecodersPerPass)
 }
 
-/** App settings (SPEC 2.8). Phase 6a: preview proxies; the defaults, theme and language come in 6c. */
+/** App settings (SPEC 2.8): proxies and export passes so far; the defaults, theme and language come in 6c. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -54,6 +55,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onProxyMode: (ProxyMode) -> Unit,
+    onDecodersPerPass: (Int?) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -101,6 +103,37 @@ fun SettingsScreen(
                             pluralStringResource(R.plurals.settings_proxies_pending, state.proxiesPending, state.proxiesPending),
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(vertical = 12.dp)) {
+                    Text(
+                        stringResource(R.string.settings_export_decoders),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    Text(
+                        stringResource(R.string.settings_export_decoders_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                    val current = state.settings.exportDecodersPerPass
+                    ChoiceRow(
+                        title = stringResource(R.string.settings_export_decoders_auto),
+                        subtitle = stringResource(R.string.settings_export_decoders_auto_hint),
+                        selected = current == null,
+                        onClick = { onDecodersPerPass(null) },
+                    )
+                    // A value set elsewhere (not one of the choices) is shown too.
+                    (AppSettings.DECODERS_PER_PASS_CHOICES + listOfNotNull(current)).distinct().forEach { count ->
+                        ChoiceRow(
+                            title = count.toString(),
+                            subtitle = null,
+                            selected = current == count,
+                            onClick = { onDecodersPerPass(count) },
                         )
                     }
                 }

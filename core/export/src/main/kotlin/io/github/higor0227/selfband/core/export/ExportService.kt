@@ -82,6 +82,8 @@ class ExportService : Service() {
         val text = when {
             state == null -> null
             state.step == ExportStep.STEMS -> getString(R.string.export_step_stems, state.stemIndex, state.stemCount)
+            state.step == ExportStep.VIDEO && state.passCount > 1 ->
+                getString(R.string.export_step_video_pass, state.pass, state.passCount)
             state.step == ExportStep.VIDEO -> getString(R.string.export_step_video)
             else -> getString(R.string.export_step_mix)
         }

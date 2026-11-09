@@ -20,9 +20,17 @@ enum class ProxyMode {
 data class AppSettings(
     val schemaVersion: Int = CURRENT_SCHEMA_VERSION,
     val proxyMode: ProxyMode = ProxyMode.AUTO,
+    /**
+     * Videos the export decodes at once before composing in several passes (SPEC 3.5); null
+     * = what the device's decoders declare.
+     */
+    val exportDecodersPerPass: Int? = null,
 ) {
     companion object {
         const val CURRENT_SCHEMA_VERSION = 1
+
+        /** Choices offered for [exportDecodersPerPass] besides automatic. */
+        val DECODERS_PER_PASS_CHOICES = listOf(8, 4)
     }
 }
 

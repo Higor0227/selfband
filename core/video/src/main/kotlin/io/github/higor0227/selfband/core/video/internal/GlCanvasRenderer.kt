@@ -10,6 +10,7 @@ import io.github.higor0227.selfband.core.model.LOG_TAG
 import io.github.higor0227.selfband.core.video.CanvasRenderer
 import io.github.higor0227.selfband.core.video.CanvasRendererFactory
 import io.github.higor0227.selfband.core.video.CanvasScene
+import io.github.higor0227.selfband.core.video.DecoderStartException
 import io.github.higor0227.selfband.core.video.SceneLayer
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -60,7 +61,11 @@ internal class GlCanvasRenderer(
                 layers += layer
                 layer.surfaceTexture.setOnFrameAvailableListener({ layer.available.release() }, handler)
                 layer.decoder = if (sceneLayer.file.exists()) {
-                    FrameStepDecoder(sceneLayer.file, layer.surface, sceneLayer.frameRate)
+                    try {
+                        FrameStepDecoder(sceneLayer.file, layer.surface, sceneLayer.frameRate)
+                    } catch (e: Exception) {
+                        throw DecoderStartException(layers.count { it.decoder != null }, e)
+                    }
                 } else {
                     Log.w(LOG_TAG, "export: missing video ${sceneLayer.file.name}")
                     null

@@ -8,23 +8,24 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import io.github.higor0227.selfband.core.export.DecoderLimit
 import io.github.higor0227.selfband.core.export.VideoCodec
 import io.github.higor0227.selfband.core.export.VideoEncoders
+import io.github.higor0227.selfband.core.export.VideoOptions
+import io.github.higor0227.selfband.core.export.VideoSpec
+import io.github.higor0227.selfband.core.model.value
 import io.github.higor0227.selfband.core.project.ProjectRepository
-import io.github.higor0227.selfband.core.video.CanvasScenes
-import io.github.higor0227.selfband.core.video.DecoderInstances
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * [VideoEncoders] from what the codecs declare (SPEC 1: detected, never per device):
- * MediaCodecList for encoders and bitrates, [DecoderInstances] for decoders.
+ * MediaCodecList for encoders and bitrates, [VideoPassPlanner] for decoders.
  */
 @Singleton
 internal class MediaCodecVideoEncoders @Inject constructor(
     private val repository: ProjectRepository,
+    private val planner: VideoPassPlanner,
 ) : VideoEncoders {
     private val codecs by lazy { MediaCodecList(MediaCodecList.REGULAR_CODECS) }
 
@@ -43,14 +44,10 @@ internal class MediaCodecVideoEncoders @Inject constructor(
         return codecs.codecInfos.firstOrNull { it.name == name }?.getCapabilitiesForType(codec.mimeType)
     }
 
-    override suspend fun decoderLimit(projectId: String): DecoderLimit? {
+    override suspend fun videoPasses(projectId: String, options: VideoOptions): Int? {
         val project = repository.observe(projectId).first() ?: return null
-        val files = CanvasScenes.build(
-            project,
-            { trackId, name -> repository.takeAudioFile(project.id, trackId, name) },
-            { name -> repository.projectMediaFile(project.id, name) },
-        ).decodedLayers.map { it.file }
-        return DecoderInstances.shortfall(files)
+        val spec = VideoSpec.of(project.aspectRatio.value, options)
+        return planner.plan(project, spec).groups?.size ?: 0
     }
 }
 

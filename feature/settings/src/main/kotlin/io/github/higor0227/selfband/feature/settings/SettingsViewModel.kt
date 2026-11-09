@@ -35,4 +35,9 @@ class SettingsViewModel @Inject constructor(
     fun setProxyMode(mode: ProxyMode) {
         viewModelScope.launch { repository.update { it.copy(proxyMode = mode) } }
     }
+
+    /** Null = automatic. */
+    fun setExportDecodersPerPass(count: Int?) {
+        viewModelScope.launch { repository.update { it.copy(exportDecodersPerPass = count) } }
+    }
 }

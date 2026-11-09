@@ -2,9 +2,9 @@
 
 Status against the phases in `SPEC.md` §4.
 
-## Current phase: Phase 6 — Scale and experience (6a confirmed; 6b in progress)
+## Current phase: Phase 6 — Scale and experience (6b confirmed; 6c in progress)
 
-Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Phase 6 is split into 6a (preview proxies), 6b (multi-pass export + tests with 12–16 tracks), 6c (settings: defaults, theme, language, verbose log), 6d (first-run wizard) and 6e (user-saved layout templates); proxies come first because they are the biggest risk of the phase. 6a was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
+Phase 0 was confirmed by the owner on 2026-11-07. Phase 1 (1a–1c) was confirmed by the owner on 2026-11-08. Phase 2 is split into 2a (camera + video sync), 2b (camera controls, grid, ghost) and 2c (takes UI, audio-only tracks); 2a was confirmed by the owner on 2026-11-08 (clap test: 0 frames off). 2b was confirmed by the owner on 2026-11-08. 2c was confirmed by the owner on 2026-11-08: **phase 2 is complete.** Phase 3 is split into 3a (GL compositor + live preview driven by the audio clock), 3b (formats 9:16 / 16:9 / 1:1 + layout templates), 3c (layout editor: layer editing, crop, guides/snap) and 3d (canvas background; own templates move to Phase 6 and global trim to Phase 4, per SPEC §4); 3a was confirmed by the owner on 2026-11-08. 3b was confirmed by the owner on 2026-11-08. 3c was confirmed by the owner on 2026-11-08. 3d was confirmed by the owner on 2026-11-08: **phase 3 is complete.** Phase 4 is split into 4a (volume, pan, mute/solo, meters, master volume + limiter), 4b (EQ per track + reverb send) and 4c (offset by dragging the waveform + global trim); the mixer lives in the recorder as a third panel mode, and `:feature:mixer` stays a placeholder until Phase 7. 4a was confirmed by the owner on 2026-11-08. 4b was confirmed by the owner on 2026-11-08. 4c was confirmed by the owner on 2026-11-08: **phase 4 is complete.** Phase 5 is split into 5a (audio: mix WAV + dry stems, export screen, foreground service, MediaStore, share), 5b (MP4 H.264 1080p30 + AAC with the preview compositor) and 5c (HEVC, 720p/4K, 60 fps, manual bitrate, decoder limits). 5a was confirmed by the owner on 2026-11-08. 5b was confirmed by the owner on 2026-11-08. 5c was confirmed by the owner on 2026-11-08: **phase 5 is complete (end of the MVP).** Phase 6 is split into 6a (preview proxies), 6b (multi-pass export + tests with 12–16 tracks), 6c (settings: defaults, theme, language, verbose log), 6d (first-run wizard) and 6e (user-saved layout templates); proxies come first because they are the biggest risk of the phase. 6a was confirmed by the owner on 2026-11-08. 6b was confirmed by the owner on 2026-11-08. Milestone 1a was tested by the owner on 2026-11-07 (alignment OK; three issues reported, fixed in 1b below).
 
 ## Setup
 - Windows 11 dev machine; Android Studio 2026.2.2.8 (bundled JBR = OpenJDK 25), Android SDK 37, build-tools 36.
@@ -733,3 +733,37 @@ Use a project with 2+ tracks with video, a trim and some layout/background chang
 - With fewer than 8 videos on this phone the automatic mode keeps the originals; the real test of the automatic switch is 6b's 12–16 track project.
 - Proxies take disk space (≈ 14 MB per minute per track at 540p30).
 - The speed measurement is per screen: leaving and reopening the project measures again.
+
+### 6b — Multi-pass export and the 12–16 track test (confirmed by the owner on 2026-11-08)
+- **Multi-pass composition (SPEC 3.5):** when a project has more videos than the device decodes at once, the video export now composes in passes instead of being blocked.
+  - The layers, bottom to top, are split into groups.
+  - Pass 1 draws the background (color, blur or picture) and the first group into an intermediate video.
+  - Each later pass draws the previous intermediate over the whole canvas, then its own group.
+  - The last pass is the final MP4, with the audio.
+  - Painting bottom to top like this gives the same picture as a single pass; the intermediates need no transparency.
+  - Intermediates: same codec, size and frame rate as the output, at 2.5× its bitrate, video only, frame k stamped exactly k / fps so the next pass picks exactly frame k.
+  - They live in the app cache (`export-passes/`); each is deleted as soon as the next pass is done, and the folder is emptied at the end, on failure and on cancel.
+- **Decoders per pass:** what the decoders declare (`getMaxSupportedInstances`): the fewest among the originals' decoder and the output codec's decoder, since later passes also decode an intermediate.
+  - The first pass also counts the blurred background's video when it is not one of its layers; every later pass keeps one decoder for the intermediate.
+  - Example: 16 videos with 6 decoders → passes of 6, 5 + intermediate, 5 + intermediate.
+  - **If a decoder refuses to start** although the codec declared room (memory or hardware limits), the export starts the video over with fewer decoders per pass (as many as did start), up to 4 times. Only below 2 decoders does it fail.
+- **New setting — Configurações → Vídeos por passada na exportação:** Automático (default), 8 or 4. A fixed value forces passes on any project with more videos than that; useful to lower when a big project fails, and to try multi-pass on this phone.
+- **Export screen:** the hard block is gone. With more than one pass it notes "o vídeo será composto em N passadas (mais lento)"; it only blocks when fewer than 2 videos can be decoded at once. While running, the screen and the notification show "Renderizando o vídeo (passada 2 de 3)…". Progress counts all passes.
+- **12–16 track test project:** I created **"Teste 16 trilhas"** on the phone by copying the 3 tracks of "Música 2" into 16 tracks (same takes repeated, each at −12 dB so the sum does not clip; automatic 4×4 grid). It is a test project of mine: delete it after the checklist, or tell me to.
+- 6 new tests (pass split: all in one pass, one decoder kept for the intermediate, separate blur source, minimum of 2, every layer drawn once in order, the pass scene). 102 unit tests in total.
+- Checked by the owner on the phone (checklist below); I installed the APK and created the test project without opening the app.
+
+### 6b checklist (owner)
+1. Open **Teste 16 trilhas**. The preview shows the 16 videos in a 4×4 grid; with **Proxies na prévia → Automático** it switches to proxies (16 ≥ 8) once they are made, about 15 s. Play it: it should be smooth and in sync.
+2. **Exportar** with Vídeo (1080p H.264 30 fps). On this phone it will probably fit in one pass (no note on the screen). The file plays, shows all 16 videos and stays in sync on the clap.
+3. In **Configurações → Vídeos por passada na exportação** choose **4**. Back in **Exportar**, the note says "5 passadas". Export: the screen shows "passada 1 de 5" … "5 de 5", and the file must look exactly like the one from step 2 (same layout, sync, background).
+4. Try **8** (3 passes) and compare again. With the blurred background (Layout → Fundo → Desfoque), the export with passes also looks like the single-pass one.
+5. Cancel an export with passes in the middle: it stops, nothing is left in Movies/Selfband.
+6. Set the option back to **Automático**.
+7. "Música 2" (3 videos) exports exactly as before, in one pass.
+8. Delete **Teste 16 trilhas** (or ask me to).
+
+### 6b known issues / notes
+- Each pass re-encodes; at 2.5× the bitrate the loss should not be visible, but a 5-pass export is slower (roughly 5× the video time) and uses temporary space in the cache (about 2.5× the final video per intermediate, two at a time at most).
+- The retry with fewer decoders only covers decoders that fail to start; one that starts and then stalls is caught by the existing 2 s frame timeout (the frame is skipped and logged).
+- Automático trusts what the codecs declare; on this phone that is probably more than 16, so the real multi-pass path is exercised with the 4 / 8 setting.

@@ -33,6 +33,9 @@ internal class VideoExportException(message: String, cause: Throwable? = null) :
  * audio sample n is stamped n / sampleRate, both from 0. The video is then delayed by the
  * measured AAC encoder delay ([AacDelay]), the silence the encoder puts before the sound.
  *
+ * Without a [mix] it writes video only, stamped k / frameRate: the intermediate of a
+ * multi-pass export ([VideoPasses]).
+ *
  * Runs entirely on the calling thread (the renderer's EGL context lives there).
  */
 internal class Mp4Export(
@@ -41,7 +44,7 @@ internal class Mp4Export(
     private val sampleRate: Int,
     private val start: Long,
     private val length: Long,
-    private val mix: OfflineMix,
+    private val mix: OfflineMix?,
     private val createCanvas: (Surface) -> CanvasRenderer,
 ) {
     private val info = MediaCodec.BufferInfo()
@@ -51,7 +54,7 @@ internal class Mp4Export(
 
     /** Encodes everything; [onProgress] gets the audio frames added since its last call. */
     suspend fun run(onProgress: (Long) -> Unit) {
-        val muxer = MuxerSink(fd)
+        val muxer = MuxerSink(fd, expectAudio = mix != null)
         var video: MediaCodec? = null
         var audio: MediaCodec? = null
         var input: Surface? = null
@@ -61,12 +64,14 @@ internal class Mp4Export(
             video = createVideoEncoder()
             input = video.createInputSurface()
             video.start()
-            audio = createAudioEncoder()
-            audio.start()
+            if (mix != null) {
+                audio = createAudioEncoder()
+                audio.start()
+            }
             canvas = createCanvas(input)
 
             val fps = spec.frameRate
-            val videoDelayNs = AacDelay.frames(sampleRate) * 1_000_000_000L / sampleRate
+            val videoDelayNs = if (mix != null) AacDelay.frames(sampleRate) * 1_000_000_000L / sampleRate else 0L
             val frames = ceil(length.toDouble() * fps / sampleRate).toLong().coerceAtLeast(1)
             var reported = 0L
             for (k in 0 until frames) {
@@ -74,19 +79,23 @@ internal class Mp4Export(
                 canvas.render(start + k.toDouble() * sampleRate / fps, k * 1_000_000_000L / fps + videoDelayNs)
                 drain(video, muxer, isVideo = true, untilEos = false)
                 val audioTarget = min(length, ceil((k + 1).toDouble() * sampleRate / fps).toLong())
-                feedAudio(audio, muxer, audioTarget)
+                if (audio != null) feedAudio(audio, muxer, audioTarget) else audioDone = audioTarget
                 onProgress(audioDone - reported)
                 reported = audioDone
             }
             video.signalEndOfInputStream()
-            feedAudio(audio, muxer, length)
-            queueAudioEnd(audio, muxer)
+            if (audio != null) {
+                feedAudio(audio, muxer, length)
+                queueAudioEnd(audio, muxer)
+            } else {
+                audioDone = length
+            }
             drain(video, muxer, isVideo = true, untilEos = true)
-            drain(audio, muxer, isVideo = false, untilEos = true)
+            if (audio != null) drain(audio, muxer, isVideo = false, untilEos = true)
             onProgress(audioDone - reported)
             muxer.finish()
             ok = true
-            Log.i(LOG_TAG, "export: video ${spec.width}x${spec.height}@$fps, $frames frame(s)")
+            Log.i(LOG_TAG, "export: video ${spec.width}x${spec.height}@$fps ${spec.bitRate / 1000} kbps, $frames frame(s)${if (mix == null) " (intermediate)" else ""}")
         } catch (e: CancellationException) {
             throw e
         } catch (e: VideoExportException) {
@@ -171,7 +180,7 @@ internal class Mp4Export(
             }
             val buffer = codec.getInputBuffer(index) ?: throw VideoExportException("no AAC input buffer")
             val frames = minOf((buffer.capacity() / 4).toLong(), OfflineMix.MAX_BLOCK_FRAMES.toLong(), target - audioDone).toInt()
-            mix.renderMix(start + audioDone, frames, floats)
+            checkNotNull(mix).renderMix(start + audioDone, frames, floats)
             for (i in 0 until frames * 2) {
                 shorts[i] = (floats[i].coerceIn(-1f, 1f) * 32767f).roundToInt().toShort()
             }
@@ -220,8 +229,8 @@ internal class Mp4Export(
         }
     }
 
-    /** MediaMuxer that holds samples until both tracks are known (it cannot add tracks after start). */
-    private class MuxerSink(fd: FileDescriptor) {
+    /** MediaMuxer that holds samples until all tracks are known (it cannot add tracks after start). */
+    private class MuxerSink(fd: FileDescriptor, private val expectAudio: Boolean) {
         private val muxer = MediaMuxer(fd, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         private var videoTrack = -1
         private var audioTrack = -1
@@ -231,7 +240,7 @@ internal class Mp4Export(
         fun addTrack(isVideo: Boolean, format: MediaFormat) {
             check(!started) { "track format changed after start" }
             if (isVideo) videoTrack = muxer.addTrack(format) else audioTrack = muxer.addTrack(format)
-            if (videoTrack >= 0 && audioTrack >= 0) {
+            if (videoTrack >= 0 && (audioTrack >= 0 || !expectAudio)) {
                 muxer.start()
                 started = true
                 for ((video, sample) in waiting) {

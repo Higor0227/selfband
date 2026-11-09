@@ -41,6 +41,20 @@ object DecoderInstances {
             .maxByOrNull { it.needed - it.available }
     }
 
+    /**
+     * The fewest simultaneous instances among the decoders of [files] (null if none could be
+     * read). Reads the files: call off the main thread.
+     */
+    fun limit(files: List<File>): Int? = files.mapNotNull { decoderOf(it)?.second }.minOrNull()
+
+    /** Simultaneous instances of the decoder for [mimeType] at [width] × [height], or null if none. */
+    fun limitFor(mimeType: String, width: Int, height: Int): Int? {
+        val format = MediaFormat.createVideoFormat(mimeType, width, height)
+        val name = codecs.findDecoderForFormat(format) ?: return null
+        return codecs.codecInfos.firstOrNull { it.name == name }
+            ?.getCapabilitiesForType(mimeType)?.maxSupportedInstances
+    }
+
     /** Empty name: no decoder takes this format. */
     private fun decoderOf(file: File): Pair<String, Int>? {
         perFile[file.absolutePath]?.let { return it }

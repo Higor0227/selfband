@@ -10,13 +10,16 @@ import io.github.higor0227.selfband.core.audio.OfflineMix
 import io.github.higor0227.selfband.core.audio.PlaybackTracks
 import io.github.higor0227.selfband.core.export.internal.MediaStoreFiles
 import io.github.higor0227.selfband.core.export.internal.Mp4Export
+import io.github.higor0227.selfband.core.export.internal.PassPlan
 import io.github.higor0227.selfband.core.export.internal.VideoExportException
+import io.github.higor0227.selfband.core.export.internal.VideoPassPlanner
+import io.github.higor0227.selfband.core.export.internal.VideoPasses
 import io.github.higor0227.selfband.core.model.LOG_TAG
 import io.github.higor0227.selfband.core.model.Project
 import io.github.higor0227.selfband.core.model.value
 import io.github.higor0227.selfband.core.project.ProjectRepository
 import io.github.higor0227.selfband.core.video.CanvasRendererFactory
-import io.github.higor0227.selfband.core.video.CanvasScenes
+import io.github.higor0227.selfband.core.video.DecoderStartException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,8 +33,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileDescriptor
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.RandomAccessFile
 import java.util.concurrent.Executors
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -43,10 +49,11 @@ import kotlin.coroutines.coroutineContext
  * [state] is [ExportState.Running].
  */
 @Singleton
-class ExportManager @Inject constructor(
+class ExportManager @Inject internal constructor(
     @ApplicationContext private val context: Context,
     private val repository: ProjectRepository,
     private val canvasFactory: CanvasRendererFactory,
+    private val planner: VideoPassPlanner,
 ) {
     private val _state = MutableStateFlow<ExportState>(ExportState.Idle)
     val state: StateFlow<ExportState> = _state.asStateFlow()
@@ -139,22 +146,27 @@ class ExportManager @Inject constructor(
         }
         val folder = ExportNames.sanitize(project.name)
         val baseName = ExportNames.sanitize(project.name)
-        val totalUnits = (if (options.video) length * VIDEO_WEIGHT else 0L) +
+        var passCount = 1
+        var pass = 0
+        fun totalUnits() = (if (options.video) length * VIDEO_WEIGHT * passCount else 0L) +
             (if (options.mixWav) length else 0L) +
             (if (options.stems) length * tracks.size else 0L)
         var doneUnits = 0L
         var lastProgress = -1f
         var lastStep: ExportStep? = null
         var lastStem = -1
+        var lastPass = -1
         fun advance(units: Long, step: ExportStep, stemIndex: Int = 0) {
             doneUnits += units
-            val p = (doneUnits.toFloat() / totalUnits).coerceIn(0f, 1f)
-            // Throttled to 0.5 % steps, but a new step or stem shows up at once.
-            if (p - lastProgress >= 0.005f || p >= 1f || step != lastStep || stemIndex != lastStem) {
+            val p = (doneUnits.toFloat() / totalUnits()).coerceIn(0f, 1f)
+            // Throttled to 0.5 % steps, but a new step, stem or pass shows up at once.
+            if (p - lastProgress >= 0.005f || p >= 1f || step != lastStep || stemIndex != lastStem || pass != lastPass) {
                 lastProgress = p
                 lastStep = step
                 lastStem = stemIndex
-                _state.value = ExportState.Running(project.id, project.name, step, stemIndex, tracks.size, p)
+                lastPass = pass
+                val passes = if (step == ExportStep.VIDEO) passCount else 0
+                _state.value = ExportState.Running(project.id, project.name, step, stemIndex, tracks.size, p, pass, passes)
             }
         }
 
@@ -165,28 +177,38 @@ class ExportManager @Inject constructor(
         }
         mix.use {
             if (options.video) {
-                advance(0, ExportStep.VIDEO)
-                val scene = CanvasScenes.build(
-                    project,
-                    { trackId, name -> repository.takeAudioFile(project.id, trackId, name) },
-                    { name -> repository.projectMediaFile(project.id, name) },
-                )
                 val spec = VideoSpec.of(project.aspectRatio.value, options.videoOptions)
-                val item = store.create(MediaStoreFiles.Kind.VIDEO, null, "$baseName.mp4", MediaStoreFiles.MIME_MP4) { pfd ->
-                    mix.reset()
-                    // The renderer's EGL context and the codecs stay on one dedicated thread.
-                    val thread = Executors.newSingleThreadExecutor { Thread(it, "SelfbandExportVideo") }
+                var maxDecoders: Int? = null
+                var retries = 0
+                while (true) {
+                    val plan = planner.plan(project, spec, maxDecoders)
+                    val groups = plan.groups
+                        ?: throw VideoExportException("only ${plan.maxDecoders} video decoder(s) available")
+                    passCount = groups.size
+                    pass = if (groups.size > 1) 1 else 0
+                    doneUnits = 0
+                    advance(0, ExportStep.VIDEO)
+                    if (groups.size > 1) {
+                        Log.i(LOG_TAG, "export: ${plan.scene.decodedLayers.size} videos in ${groups.size} passes of up to ${plan.maxDecoders} decoders")
+                    }
                     try {
-                        withContext(thread.asCoroutineDispatcher()) {
-                            Mp4Export(pfd.fileDescriptor, spec, project.sampleRate, start, length, mix) { surface ->
-                                canvasFactory.create(scene, surface, spec.width, spec.height)
-                            }.run { frames -> advance(frames * VIDEO_WEIGHT, ExportStep.VIDEO) }
+                        val item = renderVideo(project, spec, plan, groups, mix, store, baseName) { frames, p ->
+                            pass = p
+                            advance(frames * VIDEO_WEIGHT, ExportStep.VIDEO)
                         }
-                    } finally {
-                        thread.shutdown()
+                        written += Written(item, MediaStoreFiles.relativePath(MediaStoreFiles.Kind.VIDEO, null))
+                        break
+                    } catch (e: DecoderStartException) {
+                        // More decoders declared than the device can run: fewer per pass.
+                        val used = minOf(plan.maxDecoders, plan.scene.decodedLayers.size)
+                        val next = minOf(e.opened, used - 1)
+                        if (next < 2 || ++retries > MAX_DECODER_RETRIES) {
+                            throw VideoExportException("video decoders could not start", e)
+                        }
+                        Log.w(LOG_TAG, "export: decoder ${e.opened + 1} did not start; retrying with $next per pass", e)
+                        maxDecoders = next
                     }
                 }
-                written += Written(item, MediaStoreFiles.relativePath(MediaStoreFiles.Kind.VIDEO, null))
             }
             val audioFolder = MediaStoreFiles.relativePath(MediaStoreFiles.Kind.AUDIO, folder)
             val buffer = FloatArray(OfflineMix.MAX_BLOCK_FRAMES * 2)
@@ -231,6 +253,65 @@ class ExportManager @Inject constructor(
         return Unit
     }
 
+    /**
+     * The MP4 in [VideoPasses]: intermediates (video only, in the cache) for all groups but
+     * the last, then the final file with the mix. [onProgress] gets audio-frame units and the
+     * 1-based pass (0 for a single pass).
+     */
+    private suspend fun renderVideo(
+        project: Project,
+        spec: VideoSpec,
+        plan: PassPlan,
+        groups: List<IntRange>,
+        mix: OfflineMix,
+        store: MediaStoreFiles,
+        baseName: String,
+        onProgress: (frames: Long, pass: Int) -> Unit,
+    ): MediaStoreFiles.Item {
+        val start = project.trimStart
+        val length = project.trimEnd - start
+        val dir = File(context.cacheDir, PASS_DIR).apply { deleteRecursively() }
+        try {
+            var previous: File? = null
+            for ((i, group) in groups.withIndex()) {
+                val passNumber = if (groups.size > 1) i + 1 else 0
+                val scene = VideoPasses.passScene(plan.scene, group, previous, spec.width, spec.height, spec.frameRate, start)
+                fun encode(fd: FileDescriptor, passSpec: VideoSpec, passMix: OfflineMix?) =
+                    Mp4Export(fd, passSpec, project.sampleRate, start, length, passMix) { surface ->
+                        canvasFactory.create(scene, surface, passSpec.width, passSpec.height)
+                    }
+                if (i < groups.lastIndex) {
+                    dir.mkdirs()
+                    val out = File(dir, "pass${i + 1}.mp4")
+                    val high = spec.copy(bitRate = (spec.bitRate * VideoPasses.INTERMEDIATE_BITRATE_FACTOR).toInt())
+                    RandomAccessFile(out, "rw").use { file ->
+                        onVideoThread { encode(file.fd, high, null).run { onProgress(it, passNumber) } }
+                    }
+                    previous?.delete()
+                    previous = out
+                } else {
+                    return store.create(MediaStoreFiles.Kind.VIDEO, null, "$baseName.mp4", MediaStoreFiles.MIME_MP4) { pfd ->
+                        mix.reset()
+                        onVideoThread { encode(pfd.fileDescriptor, spec, mix).run { onProgress(it, passNumber) } }
+                    }
+                }
+            }
+            error("no pass")
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    /** The renderer's EGL context and the codecs stay on one dedicated thread. */
+    private suspend fun onVideoThread(block: suspend () -> Unit) {
+        val thread = Executors.newSingleThreadExecutor { Thread(it, "SelfbandExportVideo") }
+        try {
+            withContext(thread.asCoroutineDispatcher()) { block() }
+        } finally {
+            thread.shutdown()
+        }
+    }
+
     /** Calls [block] for consecutive blocks covering [start, start + length), checking for cancellation. */
     private suspend fun renderRange(start: Long, length: Long, block: (position: Long, frames: Int) -> Unit) {
         var done = 0L
@@ -245,5 +326,8 @@ class ExportManager @Inject constructor(
     private companion object {
         /** Rendering a video frame costs about this many audio frames' worth of WAV writing. */
         const val VIDEO_WEIGHT = 4L
+        /** Cache folder of the multi-pass intermediates, emptied before and after each export. */
+        const val PASS_DIR = "export-passes"
+        const val MAX_DECODER_RETRIES = 4
     }
 }

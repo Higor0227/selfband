@@ -5,7 +5,6 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.higor0227.selfband.core.export.DecoderLimit
 import io.github.higor0227.selfband.core.export.ExportManager
 import io.github.higor0227.selfband.core.export.ExportOptions
 import io.github.higor0227.selfband.core.export.ExportState
@@ -17,6 +16,7 @@ import io.github.higor0227.selfband.core.export.VideoSpec
 import io.github.higor0227.selfband.core.export.WavFormat
 import io.github.higor0227.selfband.core.model.Project
 import io.github.higor0227.selfband.core.model.value
+import io.github.higor0227.selfband.core.project.AppSettingsRepository
 import io.github.higor0227.selfband.core.project.ProjectRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -49,15 +49,18 @@ data class ExportUiState(
     val busyElsewhere: Boolean = false,
     /** Modes this device can encode for the project's canvas, with their bitrate range (null until known). */
     val modes: Map<VideoMode, IntRange?>? = null,
-    /** Set when the project has more videos than simultaneous decoders. */
-    val decoderLimit: DecoderLimit? = null,
+    /**
+     * Composition passes of the video export (SPEC 3.5): 1 = all videos at once, more = several
+     * passes, 0 = this device cannot decode enough videos at once; null until known.
+     */
+    val videoPasses: Int? = null,
 ) {
     val videoSpec: VideoSpec
         get() = VideoSpec.of(project?.aspectRatio?.value ?: (9f / 16f), options.videoOptions)
 
     /** Video is selected but cannot be made on this device as configured. */
     val videoBlocked: Boolean
-        get() = options.video && (decoderLimit != null || modes?.containsKey(options.videoOptions.mode) == false)
+        get() = options.video && (videoPasses == 0 || modes?.containsKey(options.videoOptions.mode) == false)
 
     val canStart: Boolean
         get() = project != null && project.trimEnd > project.trimStart && !options.isEmpty &&
@@ -71,16 +74,17 @@ class ExportViewModel @Inject constructor(
     repository: ProjectRepository,
     private val manager: ExportManager,
     private val encoders: VideoEncoders,
+    settings: AppSettingsRepository,
 ) : ViewModel() {
 
     private val projectId: String = checkNotNull(savedStateHandle[ARG_PROJECT_ID])
     private val options = MutableStateFlow(ExportOptions())
     private val modes = MutableStateFlow<Map<VideoMode, IntRange?>?>(null)
-    private val decoderLimit = MutableStateFlow<DecoderLimit?>(null)
+    private val videoPasses = MutableStateFlow<Int?>(null)
     private val project = repository.observe(projectId)
 
     val uiState: StateFlow<ExportUiState> =
-        combine(project, options, manager.state, modes, decoderLimit) { project, opts, export, modes, limit ->
+        combine(project, options, manager.state, modes, videoPasses) { project, opts, export, modes, passes ->
             val mine = export.takeIf { it.projectId() == projectId }
             ExportUiState(
                 project = project,
@@ -88,7 +92,7 @@ class ExportViewModel @Inject constructor(
                 export = mine,
                 busyElsewhere = export is ExportState.Running && mine == null,
                 modes = modes,
-                decoderLimit = limit,
+                videoPasses = passes,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExportUiState())
 
@@ -103,12 +107,16 @@ class ExportViewModel @Inject constructor(
                     options.update { it.copy(videoOptions = fit(it.videoOptions, found)) }
                 }
         }
-        // Simultaneous decoders (SPEC 3.5); re-checked when the tracks or canvas change.
+        // Simultaneous decoders (SPEC 3.5); re-checked when the videos, the output or the setting change.
         viewModelScope.launch {
-            project.filterNotNull().map { it.tracks to it.canvas }.distinctUntilChanged()
-                .mapLatest { encoders.decoderLimit(projectId) }
+            combine(
+                project.filterNotNull().map { it.tracks to it.canvas }.distinctUntilChanged(),
+                options.map { it.videoOptions.mode }.distinctUntilChanged(),
+                settings.settings.map { it.exportDecodersPerPass }.distinctUntilChanged(),
+            ) { _, _, _ -> }
+                .mapLatest { encoders.videoPasses(projectId, options.value.videoOptions) }
                 .flowOn(Dispatchers.IO)
-                .collect { decoderLimit.value = it }
+                .collect { videoPasses.value = it }
         }
     }
 

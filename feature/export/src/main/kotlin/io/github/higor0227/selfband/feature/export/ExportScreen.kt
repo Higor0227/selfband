@@ -209,7 +209,11 @@ private fun RunningCard(export: ExportState.Running, onCancel: () -> Unit) {
             Text(
                 when (export.step) {
                     ExportStep.STEMS -> stringResource(R.string.export_running_stems, export.stemIndex, export.stemCount)
-                    ExportStep.VIDEO -> stringResource(R.string.export_running_video)
+                    ExportStep.VIDEO -> if (export.passCount > 1) {
+                        stringResource(R.string.export_running_video_pass, export.pass, export.passCount)
+                    } else {
+                        stringResource(R.string.export_running_video)
+                    }
                     ExportStep.MIX -> stringResource(R.string.export_running_mix)
                 },
             )
