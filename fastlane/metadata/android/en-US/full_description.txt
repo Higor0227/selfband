@@ -1,0 +1,35 @@
+Selfband lets you record multitrack videos by yourself. Record a base track, then record the other parts while listening to the previous ones on headphones, and put everything together in a video collage with mixing and editing in real time. It is a one-person band on your phone.
+
+ACCURATE SYNC
+• Each track is recorded while the others play back, and it lands in the project already aligned.
+• Latency is measured on your own phone and audio gear (a quick calibration with headphones or a loopback cable), so it fits any device.
+• The audio clock leads and the video follows it, so a clap lines up with its picture.
+
+WORKS WITH YOUR GEAR
+• The phone microphone, wired headphones, any USB class-compliant audio interface, or Bluetooth (with a warning about its latency).
+• Nothing is tailored to a brand or model: the app uses what it detects, what it measures and what you choose.
+
+RECORDING
+• Front or back camera, with resolution, frame rate, stabilization, a framing grid and a "ghost" of another track to match your position.
+• Metronome with count-in, takes per track, and audio-only tracks.
+• No artificial limits on the number of tracks or the length: only your phone's hardware and storage.
+
+CANVAS AND LAYOUT
+• Vertical (9:16) for Instagram, TikTok and Shorts, horizontal (16:9) for YouTube, and square (1:1).
+• Ready-made layouts, a free layout editor (position, size, crop, guides and snapping), canvas background, and your own saved templates.
+
+MIXER
+• Volume, pan, mute and solo per track, level meters, master volume and a limiter.
+• Two effects only, on purpose: EQ per track and a reverb send.
+• Fine offset by dragging the waveform, and global trim.
+
+EXPORT
+• MP4 video in H.264 or HEVC, 720p to 4K, 30 or 60 fps.
+• WAV of the mix and of each dry track (stems).
+• Saved to your gallery and ready to share. Projects with many tracks use lightweight preview copies so playback stays smooth.
+
+PRIVATE AND FREE
+• No internet permission, no ads, no tracking, no account. Everything stays on your phone.
+• Free software under the GNU GPL v3 or later. Source code: https://github.com/higor0227/selfband
+
+Available in English and Brazilian Portuguese.

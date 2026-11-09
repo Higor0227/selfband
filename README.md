@@ -1,10 +1,28 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<img src="docs/images/icon-512.png" alt="Selfband icon" width="96" align="right">
+
 # Selfband
 
 **Record synchronized multitrack videos by yourself: a one-person band on your Android phone.**
 
 Record a base track, then record the other parts while listening to the previous ones, and assemble everything into a video collage with real-time mixing and editing.
 
-> Status: early development (Phase 0, foundation). Not usable yet. See [PROGRESS.md](PROGRESS.md).
+> Status: feature-complete for a first release (0.x), being tested on real devices. Development status: [PROGRESS.md](PROGRESS.md).
+
+## Features
+
+- **Recording:** each track is recorded while the others play back, with front or back camera, metronome and count-in, takes, and audio-only tracks.
+- **Sync:** latency calibration per device and audio route; the audio clock leads and video follows.
+- **Canvas:** 9:16, 16:9 and 1:1, ready-made layouts, a free layout editor and your own templates.
+- **Mixer:** volume, pan, mute/solo, meters, EQ per track, reverb send, master limiter, offset by dragging the waveform, global trim.
+- **Export:** MP4 (H.264 or HEVC, 720p to 4K, 30/60 fps), WAV mix and dry stems, saved to the gallery and ready to share.
+- **Languages:** English and Brazilian Portuguese.
+
+## Install
+
+Signed APKs are published on the [Releases](https://github.com/higor0227/selfband/releases) page. F-Droid and Play Store are planned ([F-Droid evaluation](docs/FDROID.md)).
+
+Privacy: Selfband has no internet permission and collects no data. See the [privacy policy](docs/PRIVACY.md) ([português](docs/PRIVACY.pt-BR.md)).
 
 ## Goals
 
@@ -14,7 +32,7 @@ Record a base track, then record the other parts while listening to the previous
 - **Focused.** Two audio effects only, EQ and reverb. It is not a full DAW.
 - **Private.** No internet permission, no data collection.
 
-The full product and technical specification is in [SPEC.md](SPEC.md) (Portuguese).
+The full product and technical specification is in [SPEC.md](SPEC.md) (Portuguese). Store texts and images are in `fastlane/metadata/android`.
 
 ## Building
 

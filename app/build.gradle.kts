@@ -35,6 +35,13 @@ android {
     // debug key, so it installs over a debug build without losing data. Never for distribution.
     val debugSignedRelease = providers.gradleProperty("selfband.debugSignedRelease").orNull == "true"
 
+    // F-Droid rejects the encrypted dependency list Google adds to the APK signing block; the
+    // Play app bundle keeps it.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = true
+    }
+
     androidResources {
         // Per-app language (Android 13+) for en and pt-BR.
         generateLocaleConfig = true

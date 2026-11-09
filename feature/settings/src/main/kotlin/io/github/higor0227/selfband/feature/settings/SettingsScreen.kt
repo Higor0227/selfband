@@ -45,6 +45,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -218,7 +220,42 @@ fun SettingsScreen(
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
                 }
             }
+
+            AboutSection()
         }
+    }
+}
+
+private const val SOURCE_URL = "https://github.com/higor0227/selfband"
+
+/** Version, license and links. The links open in the browser; the app itself has no internet access. */
+@Composable
+private fun AboutSection() {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val version = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
+    }
+    val privacyUrl = stringResource(R.string.settings_about_privacy_url)
+    Section(stringResource(R.string.settings_about), stringResource(R.string.settings_about_license), chips = false) {
+        Text(
+            stringResource(R.string.settings_about_version, version),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        LinkRow(stringResource(R.string.settings_about_source)) { uriHandler.openUri(SOURCE_URL) }
+        LinkRow(stringResource(R.string.settings_about_privacy)) { uriHandler.openUri(privacyUrl) }
+    }
+}
+
+@Composable
+private fun LinkRow(text: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
     }
 }
 

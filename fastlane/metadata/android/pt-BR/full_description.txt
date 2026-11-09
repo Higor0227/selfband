@@ -1,0 +1,35 @@
+Com o Selfband você grava vídeos multipista sozinho. Grave uma trilha base, depois grave as outras partes ouvindo as anteriores no fone, e junte tudo numa colagem de vídeo com mixagem e edição em tempo real. É a banda de uma pessoa só, no seu celular.
+
+SINCRONIA PRECISA
+• Cada trilha é gravada enquanto as outras tocam, e entra no projeto já alinhada.
+• A latência é medida no seu próprio celular e equipamento de áudio (uma calibração rápida com fone ou cabo de loopback), então funciona em qualquer aparelho.
+• O relógio do áudio manda e o vídeo acompanha, então uma palma bate com a imagem dela.
+
+FUNCIONA COM O SEU EQUIPAMENTO
+• Microfone do celular, fone com fio, qualquer interface de áudio USB class-compliant, ou Bluetooth (com um aviso sobre a latência).
+• Nada é feito para uma marca ou modelo específico: o app usa o que detecta, o que mede e o que você escolhe.
+
+GRAVAÇÃO
+• Câmera frontal ou traseira, com resolução, taxa de quadros, estabilização, grade de enquadramento e o "fantasma" de outra trilha para acertar a posição.
+• Metrônomo com contagem, takes por trilha e trilhas só de áudio.
+• Sem limites artificiais de número de trilhas ou duração: só o hardware e o armazenamento do celular.
+
+CANVAS E LAYOUT
+• Vertical (9:16) para Instagram, TikTok e Shorts, horizontal (16:9) para YouTube, e quadrado (1:1).
+• Layouts prontos, editor de layout livre (posição, tamanho, recorte, guias e encaixe), fundo do canvas e seus próprios templates salvos.
+
+MIXER
+• Volume, pan, mudo e solo por trilha, medidores de nível, volume master e limitador.
+• Só dois efeitos, de propósito: EQ por trilha e envio de reverb.
+• Ajuste fino de offset arrastando a forma de onda, e corte global.
+
+EXPORTAÇÃO
+• Vídeo MP4 em H.264 ou HEVC, de 720p a 4K, 30 ou 60 fps.
+• WAV da mixagem e de cada trilha seca (stems).
+• Salvo na galeria e pronto para compartilhar. Projetos com muitas trilhas usam cópias leves na prévia para a reprodução continuar fluida.
+
+PRIVADO E LIVRE
+• Sem permissão de internet, sem anúncios, sem rastreamento, sem conta. Tudo fica no seu celular.
+• Software livre sob a GNU GPL v3 ou posterior. Código-fonte: https://github.com/higor0227/selfband
+
+Disponível em inglês e português do Brasil.

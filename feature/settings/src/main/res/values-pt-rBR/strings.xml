@@ -205,4 +205,10 @@
     <string name="onboarding_format_1_1">Posts no feed</string>
     <string name="settings_onboarding">Assistente inicial</string>
     <string name="settings_onboarding_hint">Permissões, como você grava, calibração e formato padrão.</string>
+    <string name="settings_about">Sobre</string>
+    <string name="settings_about_license">Software livre sob a GNU GPL v3 ou posterior. Sem acesso à internet e sem coleta de dados.</string>
+    <string name="settings_about_version">Versão %1$s</string>
+    <string name="settings_about_source">Código-fonte</string>
+    <string name="settings_about_privacy">Política de privacidade</string>
+    <string name="settings_about_privacy_url">https://github.com/higor0227/selfband/blob/main/docs/PRIVACY.pt-BR.md</string>
 </resources>
