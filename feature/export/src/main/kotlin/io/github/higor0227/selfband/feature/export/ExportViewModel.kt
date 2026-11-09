@@ -8,12 +8,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.higor0227.selfband.core.export.ExportManager
 import io.github.higor0227.selfband.core.export.ExportOptions
 import io.github.higor0227.selfband.core.export.ExportState
-import io.github.higor0227.selfband.core.export.VideoCodec
+import io.github.higor0227.selfband.core.model.VideoCodec
 import io.github.higor0227.selfband.core.export.VideoEncoders
 import io.github.higor0227.selfband.core.export.VideoOptions
 import io.github.higor0227.selfband.core.export.VideoResolution
 import io.github.higor0227.selfband.core.export.VideoSpec
 import io.github.higor0227.selfband.core.export.WavFormat
+import io.github.higor0227.selfband.core.model.ExportFolder
 import io.github.higor0227.selfband.core.model.Project
 import io.github.higor0227.selfband.core.model.value
 import io.github.higor0227.selfband.core.project.AppSettingsRepository
@@ -54,6 +55,8 @@ data class ExportUiState(
      * passes, 0 = this device cannot decode enough videos at once; null until known.
      */
     val videoPasses: Int? = null,
+    /** Export folder under Movies/ and Music/ (SPEC 2.8). */
+    val folder: String = ExportFolder.DEFAULT,
 ) {
     val videoSpec: VideoSpec
         get() = VideoSpec.of(project?.aspectRatio?.value ?: (9f / 16f), options.videoOptions)
@@ -74,7 +77,7 @@ class ExportViewModel @Inject constructor(
     repository: ProjectRepository,
     private val manager: ExportManager,
     private val encoders: VideoEncoders,
-    settings: AppSettingsRepository,
+    private val settings: AppSettingsRepository,
 ) : ViewModel() {
 
     private val projectId: String = checkNotNull(savedStateHandle[ARG_PROJECT_ID])
@@ -84,7 +87,10 @@ class ExportViewModel @Inject constructor(
     private val project = repository.observe(projectId)
 
     val uiState: StateFlow<ExportUiState> =
-        combine(project, options, manager.state, modes, videoPasses) { project, opts, export, modes, passes ->
+        combine(
+            project, options, manager.state, modes,
+            combine(videoPasses, settings.settings) { passes, s -> passes to ExportFolder.sanitize(s.exportFolder) },
+        ) { project, opts, export, modes, (passes, folder) ->
             val mine = export.takeIf { it.projectId() == projectId }
             ExportUiState(
                 project = project,
@@ -93,10 +99,19 @@ class ExportViewModel @Inject constructor(
                 busyElsewhere = export is ExportState.Running && mine == null,
                 modes = modes,
                 videoPasses = passes,
+                folder = folder,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ExportUiState())
 
     init {
+        // Start from the defaults chosen in the settings (SPEC 2.8), unless already changed here.
+        viewModelScope.launch {
+            val defaults = ExportOptions.from(settings.get().export)
+            options.update { current ->
+                if (current != ExportOptions()) current
+                else defaults.copy(videoOptions = fit(defaults.videoOptions, modes.value))
+            }
+        }
         // What the encoders take depends only on the canvas shape (SPEC 2.7: "4K when supported").
         viewModelScope.launch {
             project.filterNotNull().map { it.aspectRatio.value }.distinctUntilChanged()

@@ -179,7 +179,7 @@ private fun OptionsCard(
                 FilterChip(selected = options.wavFormat == WavFormat.FLOAT_32, onClick = { onFormat(WavFormat.FLOAT_32) },
                     label = { Text(stringResource(R.string.export_32float)) })
             }
-            Text(stringResource(R.string.export_destination, "Music/Selfband/$name/"), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.export_destination, "Music/${state.folder}/$name/"), style = MaterialTheme.typography.bodySmall)
         }
     }
     if (state.busyElsewhere) {

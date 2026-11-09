@@ -8,7 +8,7 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import io.github.higor0227.selfband.core.export.VideoCodec
+import io.github.higor0227.selfband.core.model.VideoCodec
 import io.github.higor0227.selfband.core.export.VideoEncoders
 import io.github.higor0227.selfband.core.export.VideoOptions
 import io.github.higor0227.selfband.core.export.VideoSpec

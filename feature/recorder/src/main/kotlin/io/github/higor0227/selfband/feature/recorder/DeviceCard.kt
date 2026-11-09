@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import io.github.higor0227.selfband.core.audio.RecordChannelMode
 import io.github.higor0227.selfband.core.model.CalibrationMethod
 import io.github.higor0227.selfband.core.model.DeviceProfile
+import io.github.higor0227.selfband.core.ui.component.audioDeviceLabel
 import io.github.higor0227.selfband.core.ui.component.LevelMeter
 import java.util.Locale
 
@@ -47,12 +48,12 @@ internal fun DeviceCard(
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                stringResource(R.string.output_label) + ": " + DeviceProfile.deviceLabel(route?.output),
+                stringResource(R.string.output_label) + ": " + audioDeviceLabel(route?.output),
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
                 stringResource(R.string.input_label) + ": " +
-                    (route?.input?.let { DeviceProfile.deviceLabel(it) } ?: stringResource(R.string.input_default)),
+                    (route?.input?.let { audioDeviceLabel(it) } ?: stringResource(R.string.input_default)),
                 style = MaterialTheme.typography.titleSmall,
             )
             if (route?.isBluetooth == true) {

@@ -8,6 +8,7 @@ hilt = "2.60.1"
 androidxHilt = "1.4.0"
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"
+appcompat = "1.7.1"
 lifecycle = "2.11.0"
 navigationCompose = "2.10.2"
 coreKtx = "1.19.1"
@@ -26,6 +27,8 @@ cmake = "3.30.4"
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+# Apache-2.0. Per-app language and night mode on every supported Android version (SPEC 2.8).
+androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }

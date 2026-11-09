@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.feature.export
 
-import io.github.higor0227.selfband.core.export.VideoCodec.H264
-import io.github.higor0227.selfband.core.export.VideoCodec.HEVC
+import io.github.higor0227.selfband.core.model.VideoCodec.H264
+import io.github.higor0227.selfband.core.model.VideoCodec.HEVC
 import io.github.higor0227.selfband.core.export.VideoOptions
 import io.github.higor0227.selfband.core.export.VideoResolution.P1080
 import io.github.higor0227.selfband.core.export.VideoResolution.P2160

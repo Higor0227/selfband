@@ -7,6 +7,7 @@ import android.util.Log
 import io.github.higor0227.selfband.core.model.LOG_TAG
 import io.github.higor0227.selfband.core.model.Project
 import io.github.higor0227.selfband.core.model.Proxies
+import io.github.higor0227.selfband.core.model.SelfbandLog
 import io.github.higor0227.selfband.core.video.ProxyGenerator
 import io.github.higor0227.selfband.core.video.ProxyState
 import kotlinx.coroutines.CoroutineScope
@@ -100,6 +101,7 @@ internal class MediaCodecProxyGenerator @Inject constructor() : ProxyGenerator {
         val temp = File(job.target.path + ".tmp")
         stopCurrent = false
         val started = SystemClock.elapsedRealtime()
+        if (SelfbandLog.verbose) Log.d(LOG_TAG, "proxy: making ${job.target.name} from ${job.source.name}")
         val transcoder = ProxyTranscoder(job.source, temp) { stopCurrent || paused.value || !job.source.exists() }
         val outcome = runCatching { transcoder.run() }
         val done = outcome.getOrNull() == true

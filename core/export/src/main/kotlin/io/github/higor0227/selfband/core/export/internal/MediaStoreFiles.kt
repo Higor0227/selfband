@@ -7,14 +7,16 @@ import android.net.Uri
 import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import io.github.higor0227.selfband.core.model.ExportFolder
 import java.io.IOException
 
 /**
- * Writes exported files into the shared collections (SPEC 2.7): video under Movies/Selfband,
- * audio under Music/Selfband (Android accepts audio only under Music). Items stay pending
+ * Writes exported files into the shared collections (SPEC 2.7): video under Movies/<folder>,
+ * audio under Music/<folder> (Android accepts audio only under Music); the folder is
+ * "Selfband" unless changed in the settings. Items stay pending
  * (hidden) until [publish], and are deleted by [discard] if the export fails or is cancelled.
  */
-internal class MediaStoreFiles(private val resolver: ContentResolver) {
+internal class MediaStoreFiles(private val resolver: ContentResolver, val root: String = ExportFolder.DEFAULT) {
 
     enum class Kind(val directory: String) {
         VIDEO(Environment.DIRECTORY_MOVIES),
@@ -37,7 +39,7 @@ internal class MediaStoreFiles(private val resolver: ContentResolver) {
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
             put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-            put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath(kind, subfolder))
+            put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath(kind, subfolder, root))
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
         val collection = when (kind) {
@@ -78,8 +80,8 @@ internal class MediaStoreFiles(private val resolver: ContentResolver) {
         const val MIME_WAV = "audio/x-wav"
         const val MIME_MP4 = "video/mp4"
 
-        /** e.g. "Movies/Selfband/" or "Music/Selfband/My song/". */
-        fun relativePath(kind: Kind, subfolder: String?): String =
-            "${kind.directory}/Selfband/" + (subfolder?.let { "$it/" } ?: "")
+        /** e.g. "Movies/Selfband/" or "Music/Selfband/My song/" ([root] is the export folder, SPEC 2.8). */
+        fun relativePath(kind: Kind, subfolder: String?, root: String = ExportFolder.DEFAULT): String =
+            "${kind.directory}/$root/" + (subfolder?.let { "$it/" } ?: "")
     }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.core.export
 
+import io.github.higor0227.selfband.core.model.VideoCodec
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

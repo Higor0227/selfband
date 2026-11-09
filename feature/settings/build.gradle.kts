@@ -8,5 +8,6 @@ dependencies {
     implementation(project(":core:project"))
     implementation(project(":core:video"))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.core.ktx)
 }

@@ -5,6 +5,7 @@ plugins {
 }
 
 dependencies {
+    implementation(project(":core:model"))
     api(platform(libs.compose.bom))
     api(libs.compose.material3)
     api(libs.compose.material.icons.core)

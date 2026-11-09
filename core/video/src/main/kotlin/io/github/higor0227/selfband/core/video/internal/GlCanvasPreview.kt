@@ -10,6 +10,7 @@ import android.view.Surface
 import io.github.higor0227.selfband.core.model.LOG_TAG
 import io.github.higor0227.selfband.core.model.ProxyMode
 import io.github.higor0227.selfband.core.model.Proxies
+import io.github.higor0227.selfband.core.model.SelfbandLog
 import io.github.higor0227.selfband.core.video.CanvasPreview
 import io.github.higor0227.selfband.core.video.CanvasPreviewFactory
 import io.github.higor0227.selfband.core.video.CanvasScene
@@ -301,7 +302,8 @@ internal class GlCanvasPreview : CanvasPreview {
     private var lastDropped = 0L
 
     /**
-     * Every few seconds while frames flow: frames shown and dropped per layer. Also the speed
+     * Every few seconds while frames flow, with verbose logging on (SPEC 3.8): frames shown and
+     * dropped per layer. Always: the speed
      * measurement: originals dropping too many frames for [SLOW_INTERVALS] intervals in a row
      * mark the preview slow (proxies from then on, in automatic mode).
      */
@@ -322,6 +324,10 @@ internal class GlCanvasPreview : CanvasPreview {
         }
         if (layers.none { it.latched > 0 } && dropped == lastDropped) return
         lastDropped = dropped
+        if (!SelfbandLog.verbose) {
+            layers.forEach { it.latched = 0 }
+            return
+        }
         val line = layers.joinToString(" | ") {
             "${it.key.substringAfterLast('/').take(8)} shown=${it.latched} dropped=${it.decoder?.droppedFrames ?: -1}"
         }

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <!-- Audio device kinds (AudioDeviceType), shown in the recorder and the wizard. -->
+    <string name="device_builtin_mic">Microfone do celular</string>
+    <string name="device_builtin_speaker">Alto-falante</string>
+    <string name="device_builtin_earpiece">Alto-falante de chamada</string>
+    <string name="device_wired_headset">Fone com fio (com microfone)</string>
+    <string name="device_wired_headphones">Fone com fio</string>
+    <string name="device_line_analog">Linha analógica</string>
+    <string name="device_line_digital">Linha digital</string>
+    <string name="device_usb_device">Interface USB</string>
+    <string name="device_usb_headset">Fone USB</string>
+    <string name="device_usb_accessory">Acessório USB</string>
+    <string name="device_bluetooth_a2dp">Bluetooth</string>
+    <string name="device_bluetooth_sco">Bluetooth (chamada)</string>
+    <string name="device_ble_headset">Fone Bluetooth LE</string>
+    <string name="device_ble_speaker">Caixa Bluetooth LE</string>
+    <string name="device_ble_broadcast">Transmissão Bluetooth LE</string>
+    <string name="device_hearing_aid">Aparelho auditivo</string>
+    <string name="device_hdmi">HDMI</string>
+    <string name="device_telephony">Chamada telefônica</string>
+    <string name="device_remote_submix">Captura interna</string>
+    <string name="device_other">Outro dispositivo</string>
+</resources>

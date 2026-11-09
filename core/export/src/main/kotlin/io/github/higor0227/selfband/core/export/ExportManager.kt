@@ -16,7 +16,10 @@ import io.github.higor0227.selfband.core.export.internal.VideoPassPlanner
 import io.github.higor0227.selfband.core.export.internal.VideoPasses
 import io.github.higor0227.selfband.core.model.LOG_TAG
 import io.github.higor0227.selfband.core.model.Project
+import io.github.higor0227.selfband.core.model.SelfbandLog
 import io.github.higor0227.selfband.core.model.value
+import io.github.higor0227.selfband.core.model.ExportFolder
+import io.github.higor0227.selfband.core.project.AppSettingsRepository
 import io.github.higor0227.selfband.core.project.ProjectRepository
 import io.github.higor0227.selfband.core.video.CanvasRendererFactory
 import io.github.higor0227.selfband.core.video.DecoderStartException
@@ -54,6 +57,7 @@ class ExportManager @Inject internal constructor(
     private val repository: ProjectRepository,
     private val canvasFactory: CanvasRendererFactory,
     private val planner: VideoPassPlanner,
+    private val settings: AppSettingsRepository,
 ) {
     private val _state = MutableStateFlow<ExportState>(ExportState.Idle)
     val state: StateFlow<ExportState> = _state.asStateFlow()
@@ -80,7 +84,8 @@ class ExportManager @Inject internal constructor(
     }
 
     private suspend fun run(projectId: String, options: ExportOptions) {
-        val store = MediaStoreFiles(context.contentResolver)
+        val root = ExportFolder.sanitize(settings.get().exportFolder)
+        val store = MediaStoreFiles(context.contentResolver, root)
         val written = mutableListOf<Written>()
         try {
             val project = repository.observe(projectId).first()
@@ -196,7 +201,7 @@ class ExportManager @Inject internal constructor(
                             pass = p
                             advance(frames * VIDEO_WEIGHT, ExportStep.VIDEO)
                         }
-                        written += Written(item, MediaStoreFiles.relativePath(MediaStoreFiles.Kind.VIDEO, null))
+                        written += Written(item, MediaStoreFiles.relativePath(MediaStoreFiles.Kind.VIDEO, null, store.root))
                         break
                     } catch (e: DecoderStartException) {
                         // More decoders declared than the device can run: fewer per pass.
@@ -210,7 +215,7 @@ class ExportManager @Inject internal constructor(
                     }
                 }
             }
-            val audioFolder = MediaStoreFiles.relativePath(MediaStoreFiles.Kind.AUDIO, folder)
+            val audioFolder = MediaStoreFiles.relativePath(MediaStoreFiles.Kind.AUDIO, folder, store.root)
             val buffer = FloatArray(OfflineMix.MAX_BLOCK_FRAMES * 2)
             if (options.mixWav) {
                 advance(0, ExportStep.MIX)
@@ -276,6 +281,9 @@ class ExportManager @Inject internal constructor(
             for ((i, group) in groups.withIndex()) {
                 val passNumber = if (groups.size > 1) i + 1 else 0
                 val scene = VideoPasses.passScene(plan.scene, group, previous, spec.width, spec.height, spec.frameRate, start)
+                if (SelfbandLog.verbose) {
+                    Log.d(LOG_TAG, "export: pass ${i + 1}/${groups.size}: layers $group, ${scene.decodedLayers.size} decoder(s)")
+                }
                 fun encode(fd: FileDescriptor, passSpec: VideoSpec, passMix: OfflineMix?) =
                     Mp4Export(fd, passSpec, project.sampleRate, start, length, passMix) { surface ->
                         canvasFactory.create(scene, surface, passSpec.width, passSpec.height)

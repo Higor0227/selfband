@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.higor0227.selfband.core.audio.AudioDeviceMonitor
 import io.github.higor0227.selfband.core.model.Project
+import io.github.higor0227.selfband.core.project.AppSettingsRepository
 import io.github.higor0227.selfband.core.project.ProjectRepository
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -15,15 +16,20 @@ import javax.inject.Inject
 class ProjectsViewModel @Inject constructor(
     private val repository: ProjectRepository,
     private val deviceMonitor: AudioDeviceMonitor,
+    private val settings: AppSettingsRepository,
 ) : ViewModel() {
 
     val projects: StateFlow<List<Project>> = repository.projects
 
-    /** Creates a project at the device's native sample rate (SPEC section 2.1). */
+    /**
+     * Creates a project at the device's native sample rate (SPEC section 2.1), with the
+     * defaults from the settings (SPEC 2.8: format, metronome, count-in, camera).
+     */
     fun create(name: String, onCreated: (String) -> Unit) {
         viewModelScope.launch {
             val sampleRate = deviceMonitor.systemInfo().nativeSampleRate ?: DEFAULT_SAMPLE_RATE
-            val project = repository.create(name.trim(), sampleRate)
+            val defaults = settings.get()
+            val project = repository.create(name.trim(), sampleRate, defaults::applyTo)
             onCreated(project.id)
         }
     }

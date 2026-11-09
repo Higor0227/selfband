@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.higor0227.selfband.core.export
 
+import io.github.higor0227.selfband.core.model.ExportDefaults
+import io.github.higor0227.selfband.core.model.VideoCodec
+
 /** What to export (SPEC 2.7). */
 data class ExportOptions(
     /** The canvas as MP4 with the mix as AAC: the main export. */
@@ -13,16 +16,24 @@ data class ExportOptions(
     val wavFormat: WavFormat = WavFormat.PCM_24,
 ) {
     val isEmpty: Boolean get() = !video && !mixWav && !stems
+
+    companion object {
+        /** The export screen's starting choices from the settings (SPEC 2.8). */
+        fun from(defaults: ExportDefaults) = ExportOptions(
+            video = defaults.video,
+            videoOptions = VideoOptions(
+                codec = defaults.codec,
+                resolution = VideoResolution.entries.firstOrNull { it.shortSide == defaults.shortSide } ?: VideoResolution.P1080,
+                frameRate = defaults.frameRate.takeIf { it in VideoOptions.FRAME_RATES } ?: VideoSpec.DEFAULT_FRAME_RATE,
+            ),
+            mixWav = defaults.mixWav,
+            stems = defaults.stems,
+            wavFormat = if (defaults.wavFloat) WavFormat.FLOAT_32 else WavFormat.PCM_24,
+        )
+    }
 }
 
 enum class ExportStep { VIDEO, MIX, STEMS }
-
-/** Video codecs (SPEC 2.7): H.264 for compatibility (default), HEVC for smaller files. */
-enum class VideoCodec(val mimeType: String, internal val bitRateFactor: Double) {
-    H264("video/avc", 1.0),
-    /** About 40 % fewer bits for the same quality. */
-    HEVC("video/hevc", 0.6),
-}
 
 /** Output sizes by their shorter side (SPEC 2.7). */
 enum class VideoResolution(val shortSide: Int) { P720(720), P1080(1080), P2160(2160) }

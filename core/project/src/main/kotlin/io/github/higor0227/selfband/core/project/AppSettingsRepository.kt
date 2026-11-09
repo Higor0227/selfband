@@ -9,5 +9,8 @@ interface AppSettingsRepository {
     /** Current settings; defaults until the file has been read. */
     val settings: StateFlow<AppSettings>
 
+    /** The settings once the file has been read. */
+    suspend fun get(): AppSettings
+
     suspend fun update(transform: (AppSettings) -> AppSettings): AppSettings
 }

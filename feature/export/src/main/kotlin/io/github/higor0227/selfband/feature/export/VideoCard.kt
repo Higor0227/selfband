@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import io.github.higor0227.selfband.core.export.VideoCodec
+import io.github.higor0227.selfband.core.model.VideoCodec
 import io.github.higor0227.selfband.core.export.VideoOptions
 import io.github.higor0227.selfband.core.export.VideoResolution
 import io.github.higor0227.selfband.core.export.VideoSpec
@@ -132,7 +132,7 @@ internal fun VideoCard(state: ExportUiState, fileName: String, actions: VideoAct
                     else -> Hint(stringResource(R.string.export_passes_hint, passes))
                 }
             }
-            Text(stringResource(R.string.export_destination, "Movies/Selfband/$fileName.mp4"), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.export_destination, "Movies/${state.folder}/$fileName.mp4"), style = MaterialTheme.typography.bodySmall)
         }
     }
 }

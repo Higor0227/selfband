@@ -240,7 +240,7 @@ fun RecorderScreen(
         if (notice == RecorderNotice.DEVICE_CHANGED) {
             stringResource(
                 R.string.notice_device_changed,
-                io.github.higor0227.selfband.core.model.DeviceProfile.deviceLabel(state.route?.output),
+                io.github.higor0227.selfband.core.ui.component.audioDeviceLabel(state.route?.output),
                 stringResource(if (state.profile?.calibration != null) R.string.profile_loaded else R.string.profile_not_calibrated),
             )
         } else {

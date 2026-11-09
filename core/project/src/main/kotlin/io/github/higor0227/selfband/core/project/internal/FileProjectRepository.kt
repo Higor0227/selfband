@@ -58,15 +58,16 @@ internal class FileProjectRepository @Inject constructor(
     override fun observe(projectId: String): Flow<Project?> =
         cache.map { it[projectId] }.distinctUntilChanged()
 
-    override suspend fun create(name: String, sampleRate: Int): Project = withContext(Dispatchers.IO) {
+    override suspend fun create(name: String, sampleRate: Int, configure: (Project) -> Project): Project = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        val project = Project(
+        val blank = Project(
             id = UUID.randomUUID().toString(),
             name = name,
             createdAtMillis = now,
             updatedAtMillis = now,
             sampleRate = sampleRate,
         )
+        val project = configure(blank).copy(id = blank.id, name = name, sampleRate = sampleRate)
         writeLock.withLock {
             store.save(project)
             cache.update { it + (project.id to project) }

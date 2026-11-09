@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <!-- Audio device kinds (AudioDeviceType), shown in the recorder and the wizard. -->
+    <string name="device_builtin_mic">Built-in microphone</string>
+    <string name="device_builtin_speaker">Speaker</string>
+    <string name="device_builtin_earpiece">Earpiece</string>
+    <string name="device_wired_headset">Wired headset</string>
+    <string name="device_wired_headphones">Wired headphones</string>
+    <string name="device_line_analog">Analog line</string>
+    <string name="device_line_digital">Digital line</string>
+    <string name="device_usb_device">USB interface</string>
+    <string name="device_usb_headset">USB headset</string>
+    <string name="device_usb_accessory">USB accessory</string>
+    <string name="device_bluetooth_a2dp">Bluetooth</string>
+    <string name="device_bluetooth_sco">Bluetooth (call)</string>
+    <string name="device_ble_headset">Bluetooth LE headset</string>
+    <string name="device_ble_speaker">Bluetooth LE speaker</string>
+    <string name="device_ble_broadcast">Bluetooth LE broadcast</string>
+    <string name="device_hearing_aid">Hearing aid</string>
+    <string name="device_hdmi">HDMI</string>
+    <string name="device_telephony">Phone call</string>
+    <string name="device_remote_submix">Internal capture</string>
+    <string name="device_other">Other device</string>
+</resources>

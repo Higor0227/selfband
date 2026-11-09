@@ -12,9 +12,54 @@ enum class ProxyMode {
     OFF,
 }
 
+/** App theme (SPEC 2.8). */
+@Serializable
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+/** Video codecs (SPEC 2.7): H.264 for compatibility (default), HEVC for smaller files. */
+@Serializable
+enum class VideoCodec(val mimeType: String, val bitRateFactor: Double) {
+    H264("video/avc", 1.0),
+    /** About 40 % fewer bits for the same quality. */
+    HEVC("video/hevc", 0.6),
+}
+
+/** Camera choices a new project starts with (SPEC 2.8: camera and recording quality). */
+@Serializable
+data class CameraDefaults(
+    val lens: CameraLens = CameraLens.FRONT,
+    val resolution: VideoResolution = VideoResolution.P1080,
+    val frameRate: Int = 30,
+    val stabilization: Boolean = false,
+) {
+    companion object {
+        val FRAME_RATES = listOf(30, 60)
+    }
+}
+
+/** What the export screen starts with (SPEC 2.8: export quality). */
+@Serializable
+data class ExportDefaults(
+    val video: Boolean = true,
+    val codec: VideoCodec = VideoCodec.H264,
+    /** Shorter side of the video: 720, 1080 or 2160. */
+    val shortSide: Int = 1080,
+    val frameRate: Int = 30,
+    val mixWav: Boolean = false,
+    val stems: Boolean = false,
+    /** WAV as 32-bit float instead of 24-bit PCM. */
+    val wavFloat: Boolean = false,
+) {
+    companion object {
+        val SHORT_SIDES = listOf(720, 1080, 2160)
+        val FRAME_RATES = listOf(30, 60)
+    }
+}
+
 /**
- * App-wide settings (SPEC 2.8), stored as `settings.json` by :core:project. Unknown keys are
- * ignored and missing ones take these defaults, so fields can be added without a migration.
+ * App-wide settings (SPEC 2.8, 3.5, 3.8), stored as `settings.json` by :core:project. Unknown
+ * keys are ignored and missing ones take these defaults, so fields can be added without a
+ * migration. The app language is kept by the platform (per-app language), not here.
  */
 @Serializable
 data class AppSettings(
@@ -25,12 +70,52 @@ data class AppSettings(
      * = what the device's decoders declare.
      */
     val exportDecodersPerPass: Int? = null,
+    val theme: ThemeMode = ThemeMode.SYSTEM,
+    /** Debug-level lines in the log (SPEC 3.8). */
+    val verboseLog: Boolean = false,
+    /** Canvas format of new projects. */
+    val aspectRatio: AspectRatio = AspectRatio.PORTRAIT_9_16,
+    /** Metronome and count-in of new projects. */
+    val metronome: MetronomeSettings = MetronomeSettings(),
+    val camera: CameraDefaults = CameraDefaults(),
+    val export: ExportDefaults = ExportDefaults(),
+    /** Folder under Movies/ and Music/ where exports go. */
+    val exportFolder: String = ExportFolder.DEFAULT,
 ) {
+    /** A just-created [project] with these defaults applied. */
+    fun applyTo(project: Project): Project = project.copy(
+        aspectRatio = aspectRatio,
+        metronome = metronome.normalized(),
+        camera = project.camera.copy(
+            lens = camera.lens,
+            resolution = camera.resolution,
+            frameRate = camera.frameRate,
+            stabilization = camera.stabilization,
+        ),
+    )
+
     companion object {
         const val CURRENT_SCHEMA_VERSION = 1
 
         /** Choices offered for [exportDecodersPerPass] besides automatic. */
         val DECODERS_PER_PASS_CHOICES = listOf(8, 4)
+    }
+}
+
+/** The export folder name (SPEC 2.8), used as `Movies/<name>/` and `Music/<name>/<project>/`. */
+object ExportFolder {
+    const val DEFAULT = "Selfband"
+    const val MAX_LENGTH = 40
+
+    /** A single safe folder name: no separators or reserved characters; [DEFAULT] if empty. */
+    fun sanitize(name: String): String {
+        val cleaned = name.trim()
+            .map { c -> if (c in "/\\:*?\"<>|" || c.isISOControl()) '_' else c }
+            .joinToString("")
+            .trim('.', ' ')
+            .take(MAX_LENGTH)
+            .trim()
+        return cleaned.ifEmpty { DEFAULT }
     }
 }
 

@@ -13,7 +13,7 @@ interface ProjectRepository {
 
     fun observe(projectId: String): Flow<Project?>
 
-    suspend fun create(name: String, sampleRate: Int): Project
+    suspend fun create(name: String, sampleRate: Int, configure: (Project) -> Project = { it }): Project
 
     /** Applies [transform] and persists atomically. Returns the saved project. */
     suspend fun update(projectId: String, transform: (Project) -> Project): Project

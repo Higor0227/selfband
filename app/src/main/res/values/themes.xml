@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Compose draws everything; this only covers the window before the first frame. -->
-    <style name="Theme.Selfband" parent="android:Theme.Material.NoActionBar" />
+    <!-- AppCompat parent: needed for the per-app language and night mode (SPEC 2.8). -->
+    <style name="Theme.Selfband" parent="Theme.AppCompat.DayNight.NoActionBar" />
     <color name="ic_launcher_background">#FF5B5FC7</color>
 </resources>

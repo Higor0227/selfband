@@ -46,6 +46,11 @@ internal class FileAppSettingsRepository @Inject constructor(
         }
     }
 
+    override suspend fun get(): AppSettings = withContext(Dispatchers.IO) {
+        ensureLoaded()
+        state.value
+    }
+
     override suspend fun update(transform: (AppSettings) -> AppSettings): AppSettings = withContext(Dispatchers.IO) {
         ensureLoaded()
         lock.withLock {
